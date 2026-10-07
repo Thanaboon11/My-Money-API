@@ -1,32 +1,89 @@
-const API=window.API_URL,$=x=>document.getElementById(x);let S={accounts:[],categories:[],transactions:[],dashboard:{}},M=new Date(),busy=false;
-const money=n=>new Intl.NumberFormat('th-TH',{style:'currency',currency:'THB'}).format(+n||0),key='mm-v2-cache';
-function toast(s){$('toast').textContent=s;$('toast').classList.add('show');setTimeout(()=>$('toast').classList.remove('show'),1700)}
-function cache(){localStorage.setItem(key,JSON.stringify(S))}function cached(){try{let x=JSON.parse(localStorage.getItem(key));if(x){S=x;render()}}catch(e){}}
-async function sync(silent=false){if(!silent)$('sync').textContent='● กำลังซิงก์…';try{let r=await fetch(API+'?action=bootstrap&_='+Date.now(),{cache:'no-store'}),j=await r.json();if(!j.success)throw Error(j.error);S=j.data;cache();render();$('sync').textContent='● ซิงก์แล้ว'}catch(e){$('sync').textContent='● ใช้ข้อมูลในเครื่อง';if(!silent)toast('ซิงก์ไม่สำเร็จ')}}
-function txrows(a){return a.length?a.map(t=>`<div class="row tx" data-id="${t.id}"><div class="left"><span class="bubble">${t.type==='รายรับ'?'↓':t.type==='โอนเงิน'?'↔':'↑'}</span><div><b>${t.title||t.category||t.type}</b><small>${t.source?('จาก '+t.source+' · '):''}${new Date(t.datetime).toLocaleDateString('th-TH')}</small></div></div><b class="${t.type==='รายรับ'?'plus':t.type==='รายจ่าย'?'minus':''}">${t.type==='รายรับ'?'+':t.type==='รายจ่าย'?'-':''}${money(t.amount)}</b></div>`).join(''):'<div class="empty">ยังไม่มีรายการ</div>'}
-function render(){let d=S.dashboard||{};$('total').textContent=money(d.totalBalance);$('income').textContent=money(d.income);$('expense').textContent=money(d.expense);$('cards').innerHTML=(S.accounts||[]).filter(a=>a.status==='ใช้งาน').map(a=>`<div class="card"><span>${a.icon||'💳'}</span><small>${a.name}</small><b>${money(a.balance)}</b></div>`).join('');$('recent').innerHTML=txrows((S.transactions||[]).slice(0,6));$('alltx').innerHTML=txrows(filter());let op=(S.accounts||[]).filter(a=>a.status==='ใช้งาน').map(a=>`<option value="${a.id}">${a.icon||''} ${a.name}</option>`).join('');$('from').innerHTML=op;$('to').innerHTML=op;$('af').innerHTML='<option value="">ทุกบัญชี</option>'+op;$('catList').innerHTML=catRows();$('accList').innerHTML=(S.accounts||[]).map(a=>`<div class="row acc" data-id="${a.id}"><div class="left"><span class="bubble">${a.icon||'💳'}</span><div><b>${a.name}</b><small>${a.accountType}</small></div></div><b>${money(a.balance)}</b></div>`).join('');bind();summary()}
-function catRows(){let b=document.querySelector('.cat-tab.on'),typ=b?b.dataset.ct:'รายจ่าย',a=(S.categories||[]).filter(c=>c.type===typ&&c.status==='ใช้งาน');return a.length?a.map(c=>`<div class="row cat-edit" data-id="${c.id}"><div class="left"><span class="bubble">${c.icon||'📌'}</span><div><b>${c.name}</b><small>${c.type}</small></div></div><span>แก้ไข ›</span></div>`).join(''):'<div class="empty">ยังไม่มีหมวดหมู่</div>'}
-function bind(){document.querySelectorAll('.cat-edit').forEach(x=>x.onclick=()=>editCat(x.dataset.id));document.querySelectorAll('.tx').forEach(x=>x.onclick=()=>edit(x.dataset.id));document.querySelectorAll('.acc').forEach(x=>x.onclick=()=>editAcc(x.dataset.id))}
-function filter(){let q=$('q').value.toLowerCase(),a=$('af').value,t=$('tf').value;return(S.transactions||[]).filter(x=>(!q||((x.title||'')+(x.note||'')+(x.source||'')+(x.category||'')).toLowerCase().includes(q))&&(!a||(x.fromAccount===a||x.toAccount===a))&&(!t||x.type===t))}
-function page(p){document.querySelectorAll('.page').forEach(x=>x.classList.toggle('on',x.id===p));document.querySelectorAll('.nav').forEach(x=>x.classList.toggle('on',x.dataset.page===p));$('title').textContent={home:'สวัสดี 👋',history:'รายการทั้งหมด',summary:'สรุปผล',accounts:'บัญชีของฉัน',categories:'หมวดหมู่'}[p];if(p==='summary')summary()}
+const API=window.API_URL,$=id=>document.getElementById(id);
+let S={accounts:[],categories:[],transactions:[],dashboard:{}},M=new Date(),saving=false;
+const cacheKey='mm-v23-cache';
+const money=n=>new Intl.NumberFormat('th-TH',{style:'currency',currency:'THB'}).format(Number(n)||0);
+function toast(t){$('toast').textContent=t;$('toast').classList.add('show');setTimeout(()=>$('toast').classList.remove('show'),1800)}
+function saveCache(){localStorage.setItem(cacheKey,JSON.stringify(S))}
+function loadCache(){try{const x=JSON.parse(localStorage.getItem(cacheKey));if(x){S=x;render()}}catch(e){}}
+async function apiGet(){const r=await fetch(API+'?action=bootstrap&_='+Date.now(),{cache:'no-store'});const j=await r.json();if(!j.success)throw Error(j.error||'โหลดไม่สำเร็จ');return j.data}
+async function apiPost(body){const r=await fetch(API,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body)});const j=await r.json();if(!j.success)throw Error(j.error||'บันทึกไม่สำเร็จ');return j}
+async function sync(silent=true){try{const d=await apiGet();S=d;saveCache();render();$('sync').textContent='● ซิงก์แล้ว'}catch(e){$('sync').textContent='● รอซิงก์';if(!silent)toast('เชื่อม Google Sheets ไม่สำเร็จ')}}
+function catName(id){const c=S.categories.find(x=>x.id===id);return c?c.name:id||''}
+function accountName(id){const a=S.accounts.find(x=>x.id===id);return a?a.name:id||''}
+function txRows(a){if(!a.length)return '<div class="empty">ยังไม่มีรายการ</div>';return a.map(t=>`<div class="row tx" data-id="${t.id}"><div class="left"><span class="bubble">${t.type==='รายรับ'?'↓':t.type==='โอนเงิน'?'↔':'↑'}</span><div><b>${t.title||catName(t.category)||t.type}</b><small>${t.source?('จาก '+t.source+' · '):''}${new Date(t.datetime).toLocaleDateString('th-TH')}</small></div></div><b class="${t.type==='รายรับ'?'plus':t.type==='รายจ่าย'?'minus':''}">${t.type==='รายรับ'?'+':t.type==='รายจ่าย'?'-':''}${money(t.amount)}</b></div>`).join('')}
+function filterTx(){const q=$('q').value.toLowerCase(),a=$('af').value,t=$('tf').value;return S.transactions.filter(x=>(!q||((x.title||'')+(x.note||'')+(x.source||'')+catName(x.category)).toLowerCase().includes(q))&&(!a||(x.fromAccount===a||x.toAccount===a))&&(!t||x.type===t))}
+function catRows(){const b=document.querySelector('.cat-tab.on'),typ=b?b.dataset.ct:'รายจ่าย';const a=S.categories.filter(c=>c.type===typ&&c.status==='ใช้งาน');return a.length?a.map(c=>`<div class="row cat-edit" data-id="${c.id}"><div class="left"><span class="bubble">${c.icon||'📌'}</span><div><b>${c.name}</b><small>${c.type}</small></div></div><span>แก้ไข ›</span></div>`).join(''):'<div class="empty">ยังไม่มีหมวดหมู่</div>'}
+function render(){
+ const d=S.dashboard||{};$('total').textContent=money(d.totalBalance);$('income').textContent=money(d.income);$('expense').textContent=money(d.expense);
+ $('cards').innerHTML=S.accounts.filter(a=>a.status==='ใช้งาน').map(a=>`<div class="card"><span>${a.icon||'💳'}</span><small>${a.name}</small><b>${money(a.balance)}</b></div>`).join('');
+ $('recent').innerHTML=txRows(S.transactions.slice(0,6));$('alltx').innerHTML=txRows(filterTx());
+ const op=S.accounts.filter(a=>a.status==='ใช้งาน').map(a=>`<option value="${a.id}">${a.icon||''} ${a.name}</option>`).join('');
+ $('from').innerHTML=op;$('to').innerHTML=op;$('af').innerHTML='<option value="">ทุกบัญชี</option>'+op;
+ $('accList').innerHTML=S.accounts.map(a=>`<div class="row acc" data-id="${a.id}"><div class="left"><span class="bubble">${a.icon||'💳'}</span><div><b>${a.name}</b><small>${a.accountType}</small></div></div><b>${money(a.balance)}</b></div>`).join('');
+ $('catList').innerHTML=catRows();bind();summary();
+}
+function bind(){document.querySelectorAll('.tx').forEach(x=>x.onclick=()=>editTx(x.dataset.id));document.querySelectorAll('.acc').forEach(x=>x.onclick=()=>editAcc(x.dataset.id));document.querySelectorAll('.cat-edit').forEach(x=>x.onclick=()=>editCat(x.dataset.id))}
+function page(p){document.querySelectorAll('.page').forEach(x=>x.classList.toggle('on',x.id===p));document.querySelectorAll('.nav').forEach(x=>x.classList.toggle('on',x.dataset.page===p));$('title').textContent={home:'สวัสดี 👋',history:'รายการทั้งหมด',summary:'สรุปผล',accounts:'บัญชีของฉัน',categories:'หมวดหมู่'}[p]||'';if(p==='summary')summary()}
 document.querySelectorAll('.nav,.goto').forEach(x=>x.onclick=()=>page(x.dataset.page));
-function type(t){$('etype').value=t;$('accountLabel').textContent=t==='รายรับ'?'รับเข้าไปที่บัญชี':t==='รายจ่าย'?'จ่ายจากบัญชี':'โอนจากบัญชี';document.querySelectorAll('.segments button').forEach(x=>x.classList.toggle('on',x.dataset.t===t));$('tow').hidden=t!=='โอนเงิน';$('catw').hidden=t==='โอนเงิน';$('sourcew').hidden=t!=='รายรับ';$('cat').innerHTML=(S.categories||[]).filter(c=>c.type===t&&c.status==='ใช้งาน').map(c=>`<option value="${c.id}">${c.icon||''} ${c.name}</option>`).join('')}
-function open(){ $('form').reset();$('moreFields').hidden=true;$('moreBtn').textContent='+ รายละเอียดเพิ่มเติม';$('eid').value='';$('mtitle').textContent='เพิ่มรายการ';$('del').hidden=true;$('dt').value=new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,16);type('รายจ่าย');$('dlg').showModal()}
-$('moreBtn').onclick=()=>{$('moreFields').hidden=!$('moreFields').hidden;$('moreBtn').textContent=$('moreFields').hidden?'+ รายละเอียดเพิ่มเติม':'− ซ่อนรายละเอียด'};$('fab').onclick=open;$('addMobile').onclick=open;$('close').onclick=()=>$('dlg').close();document.querySelectorAll('.segments button').forEach(x=>x.onclick=()=>type(x.dataset.t));
-function edit(id){$('moreFields').hidden=false;$('moreBtn').textContent='− ซ่อนรายละเอียด';let t=S.transactions.find(x=>x.id===id);if(!t)return;$('eid').value=id;$('mtitle').textContent='แก้ไขรายการ';type(t.type);$('dt').value=(t.datetime||'').slice(0,16);$('amt').value=t.amount;$('from').value=t.fromAccount;$('to').value=t.toAccount||'';$('cat').value=t.category||'';$('source').value=t.source||'';$('desc').value=t.title||'';$('note').value=t.note||'';$('del').hidden=false;$('dlg').showModal()}
-async function post(b){let r=await fetch(API,{method:'POST',body:JSON.stringify(b)}),j=await r.json();if(!j.success)throw Error(j.error);return j}
-$('form').onsubmit=async e=>{e.preventDefault();if(busy)return;busy=true;let sb=$('form').querySelector('.primary');sb.disabled=true;sb.textContent='กำลังบันทึก…';let id=$('eid').value,t=$('etype').value,d={id,datetime:$('dt').value,type:t,fromAccount:$('from').value,toAccount:t==='โอนเงิน'?$('to').value:'',category:t==='โอนเงิน'?'':$('cat').value,source:t==='รายรับ'?$('source').value:'',title:$('desc').value,amount:+$('amt').value,note:$('note').value};let tmp={...d,id:id||'LOCAL-'+Date.now()};if(id)S.transactions=S.transactions.map(x=>x.id===id?tmp:x);else S.transactions.unshift(tmp);render();$('dlg').close();toast('บันทึกแล้ว กำลังซิงก์…');try{await post({action:id?'updateTransaction':'addTransaction',data:d});await sync(true);toast('ลง Google Sheets แล้ว')}catch(x){toast('ซิงก์ไม่สำเร็จ');await sync(true)}busy=false;sb.disabled=false;sb.textContent='บันทึก'}
-$('del').onclick=async()=>{let id=$('eid').value;if(!confirm('ลบรายการนี้ใช่ไหม?'))return;$('dlg').close();try{await post({action:'deleteTransaction',id});await sync(true);toast('ลบแล้ว')}catch(e){toast('ลบไม่สำเร็จ')}}
-function summary(){let y=M.getFullYear(),m=M.getMonth(),a=(S.transactions||[]).filter(t=>{let d=new Date(t.datetime);return d.getFullYear()===y&&d.getMonth()===m});$('month').textContent=M.toLocaleDateString('th-TH',{month:'long',year:'numeric'});let i=0,e=0,c={};a.forEach(t=>{if(t.type==='รายรับ')i+=+t.amount;if(t.type==='รายจ่าย'){e+=+t.amount;c[t.category]=(c[t.category]||0)+(+t.amount)}});$('si').textContent=money(i);$('se').textContent=money(e);$('sn').textContent=money(i-e);let mom=a.filter(t=>t.type==='รายรับ'&&((t.source||'').trim()==='แม่'||(t.title||'').includes('แม่')));$('motherTotal').textContent=money(mom.reduce((s,t)=>s+(+t.amount),0));$('motherCount').textContent=mom.length+' ครั้ง';$('motherList').innerHTML=mom.map(t=>`<div class="minirow"><span>${new Date(t.datetime).toLocaleDateString('th-TH')} · ${t.title||'ได้รับเงิน'}</span><b>${money(t.amount)}</b></div>`).join('')||'<div class="empty">เดือนนี้ยังไม่มีรายการจากแม่</div>';let mx=Math.max(1,...Object.values(c));$('cats').innerHTML=Object.entries(c).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<div class="barline"><div class="barhead"><span>${k}</span><b>${money(v)}</b></div><div class="bar"><i style="width:${v/mx*100}%"></i></div></div>`).join('')||'<div class="empty">ยังไม่มีรายจ่าย</div>';$('balances').innerHTML=(S.accounts||[]).map(x=>`<div class="minirow"><span>${x.icon||'💳'} ${x.name}</span><b>${money(x.balance)}</b></div>`).join('')}
-$('prev').onclick=()=>{M.setMonth(M.getMonth()-1);summary()};$('next').onclick=()=>{M.setMonth(M.getMonth()+1);summary()};['q','af','tf'].forEach(id=>$(id).addEventListener(id==='q'?'input':'change',()=>{$('alltx').innerHTML=txrows(filter());bind()}));
-$('addAcc').onclick=()=>{$('aform').reset();$('aid').value='';$('adlg').showModal()};$('aclose').onclick=()=>$('adlg').close();function editAcc(id){let a=S.accounts.find(x=>x.id===id);if(!a)return;$('aid').value=id;$('aname').value=a.name;$('atype').value=a.accountType;$('opening').value=a.openingBalance;$('aicon').value=a.icon;$('adlg').showModal()}
-$('aform').onsubmit=async e=>{e.preventDefault();let id=$('aid').value,d={id,name:$('aname').value,accountType:$('atype').value,openingBalance:+$('opening').value,icon:$('aicon').value};$('adlg').close();try{await post({action:id?'updateAccount':'addAccount',data:d});await sync(true);toast('บันทึกบัญชีแล้ว')}catch(e){toast('บันทึกไม่สำเร็จ')}}
-
+function setType(t){
+ $('etype').value=t;document.querySelectorAll('.segments button').forEach(x=>x.classList.toggle('on',x.dataset.t===t));
+ $('accountLabel').textContent=t==='โอนเงิน'?'โอนจากบัญชี':'บัญชี';
+ $('tow').hidden=t!=='โอนเงิน';$('catw').hidden=t==='โอนเงิน';$('sourcew').hidden=t!=='รายรับ';
+ $('cat').innerHTML=S.categories.filter(c=>c.type===t&&c.status==='ใช้งาน').map(c=>`<option value="${c.id}">${c.icon||''} ${c.name}</option>`).join('');
+}
+function openTx(){
+ $('form').reset();$('eid').value='';$('mtitle').textContent='บันทึกรายการ';$('del').hidden=true;$('moreFields').hidden=true;$('moreBtn').textContent='+ รายละเอียดเพิ่มเติม';
+ $('dt').value=new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,16);setType('รายจ่าย');$('dlg').showModal();
+}
+$('fab').onclick=openTx;$('addMobile').onclick=openTx;$('close').onclick=()=>$('dlg').close();
+document.querySelectorAll('.segments button').forEach(x=>x.onclick=()=>setType(x.dataset.t));
+$('moreBtn').onclick=()=>{$('moreFields').hidden=!$('moreFields').hidden;$('moreBtn').textContent=$('moreFields').hidden?'+ รายละเอียดเพิ่มเติม':'− ซ่อนรายละเอียด'};
+function editTx(id){
+ const t=S.transactions.find(x=>x.id===id);if(!t)return;
+ $('eid').value=t.id;$('mtitle').textContent='แก้ไขรายการ';setType(t.type);$('dt').value=(t.datetime||'').slice(0,16);$('amt').value=t.amount;$('from').value=t.fromAccount;$('to').value=t.toAccount||'';$('cat').value=t.category||'';$('source').value=t.source||'';$('desc').value=t.title||'';$('note').value=t.note||'';$('moreFields').hidden=false;$('moreBtn').textContent='− ซ่อนรายละเอียด';$('del').hidden=false;$('dlg').showModal();
+}
+$('form').onsubmit=async e=>{
+ e.preventDefault();if(saving)return;saving=true;
+ const btn=$('form').querySelector('.primary');btn.disabled=true;btn.textContent='บันทึก';
+ const id=$('eid').value,t=$('etype').value;
+ const d={id,datetime:$('dt').value,type:t,fromAccount:$('from').value,toAccount:t==='โอนเงิน'?$('to').value:'',category:t==='โอนเงิน'?'':$('cat').value,source:t==='รายรับ'?$('source').value.trim():'',title:$('desc').value.trim(),amount:Number($('amt').value),note:$('note').value.trim()};
+ // Close instantly; do not make user wait for Sheets.
+ $('dlg').close();
+ const old=JSON.parse(JSON.stringify(S.transactions));
+ if(id)S.transactions=S.transactions.map(x=>x.id===id?{...x,...d}:x);else S.transactions.unshift({...d,id:'LOCAL-'+Date.now()});
+ render();toast(id?'แก้ไขแล้ว · กำลังซิงก์':'บันทึกแล้ว · กำลังซิงก์');
+ try{await apiPost({action:id?'updateTransaction':'addTransaction',data:d});await sync(true);toast('✓ ซิงก์แล้ว')}
+ catch(err){S.transactions=old;render();toast('ซิงก์ไม่สำเร็จ กรุณาลองอีกครั้ง')}
+ finally{saving=false;btn.disabled=false;btn.textContent='บันทึก'}
+};
+$('del').onclick=async()=>{
+ const id=$('eid').value;if(!id||!confirm('ลบรายการนี้ใช่ไหม?'))return;
+ $('dlg').close();const old=JSON.parse(JSON.stringify(S.transactions));S.transactions=S.transactions.filter(x=>x.id!==id);render();toast('ลบแล้ว · กำลังซิงก์');
+ try{await apiPost({action:'deleteTransaction',id});await sync(true);toast('✓ ลบแล้ว')}
+ catch(e){S.transactions=old;render();toast('ลบไม่สำเร็จ')}
+};
+function summary(){
+ const y=M.getFullYear(),m=M.getMonth(),a=S.transactions.filter(t=>{const d=new Date(t.datetime);return d.getFullYear()===y&&d.getMonth()===m});
+ $('month').textContent=M.toLocaleDateString('th-TH',{month:'long',year:'numeric'});
+ let inc=0,exp=0,c={};a.forEach(t=>{if(t.type==='รายรับ')inc+=Number(t.amount)||0;if(t.type==='รายจ่าย'){exp+=Number(t.amount)||0;c[t.category]=(c[t.category]||0)+(Number(t.amount)||0)}});
+ $('si').textContent=money(inc);$('se').textContent=money(exp);$('sn').textContent=money(inc-exp);
+ const mom=a.filter(t=>t.type==='รายรับ'&&((t.source||'').trim().includes('แม่')||(t.title||'').trim().includes('แม่')));
+ $('motherTotal').textContent=money(mom.reduce((s,t)=>s+(Number(t.amount)||0),0));$('motherCount').textContent=mom.length+' ครั้ง';
+ $('motherList').innerHTML=mom.length?mom.map(t=>`<div class="minirow"><span>${new Date(t.datetime).toLocaleDateString('th-TH')} · ${t.title||'แม่ให้เงิน'} · ${accountName(t.fromAccount)}</span><b>${money(t.amount)}</b></div>`).join(''):'<div class="empty">เดือนนี้ยังไม่มีรายการจากแม่</div>';
+ const mx=Math.max(1,...Object.values(c));$('cats').innerHTML=Object.keys(c).length?Object.entries(c).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<div class="barline"><div class="barhead"><span>${catName(k)}</span><b>${money(v)}</b></div><div class="bar"><i style="width:${v/mx*100}%"></i></div></div>`).join(''):'<div class="empty">ยังไม่มีรายจ่าย</div>';
+ $('balances').innerHTML=S.accounts.map(x=>`<div class="minirow"><span>${x.icon||'💳'} ${x.name}</span><b>${money(x.balance)}</b></div>`).join('');
+}
+$('prev').onclick=()=>{M.setMonth(M.getMonth()-1);summary()};$('next').onclick=()=>{M.setMonth(M.getMonth()+1);summary()};
+['q','af','tf'].forEach(id=>$(id).addEventListener(id==='q'?'input':'change',()=>{$('alltx').innerHTML=txRows(filterTx());bind()}));
+$('addAcc').onclick=()=>{$('aform').reset();$('aid').value='';$('adlg').showModal()};$('aclose').onclick=()=>$('adlg').close();
+function editAcc(id){const a=S.accounts.find(x=>x.id===id);if(!a)return;$('aid').value=id;$('aname').value=a.name;$('atype').value=a.accountType;$('opening').value=a.openingBalance;$('aicon').value=a.icon;$('adlg').showModal()}
+$('aform').onsubmit=async e=>{e.preventDefault();const id=$('aid').value,d={id,name:$('aname').value,accountType:$('atype').value,openingBalance:Number($('opening').value),icon:$('aicon').value};$('adlg').close();try{await apiPost({action:id?'updateAccount':'addAccount',data:d});await sync(true);toast('✓ บันทึกบัญชีแล้ว')}catch(e){toast('บันทึกบัญชีไม่สำเร็จ')}};
 document.querySelectorAll('.cat-tab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.cat-tab').forEach(x=>x.classList.remove('on'));b.classList.add('on');$('catList').innerHTML=catRows();bind()});
-$('addCat').onclick=()=>{$('cform').reset();$('cid').value='';let b=document.querySelector('.cat-tab.on');$('ctype').value=b?b.dataset.ct:'รายจ่าย';$('cicon').value='📌';$('ctitle').textContent='เพิ่มหมวดหมู่';$('cdel').hidden=true;$('cdlg').showModal()};
+$('addCat').onclick=()=>{$('cform').reset();$('cid').value='';const b=document.querySelector('.cat-tab.on');$('ctype').value=b?b.dataset.ct:'รายจ่าย';$('cicon').value='📌';$('ctitle').textContent='เพิ่มหมวดหมู่';$('cdel').hidden=true;$('cdlg').showModal()};
 $('cclose').onclick=()=>$('cdlg').close();
-function editCat(id){let c=(S.categories||[]).find(x=>x.id===id);if(!c)return;$('cid').value=id;$('ctype').value=c.type;$('cname').value=c.name;$('cicon').value=c.icon||'📌';$('ctitle').textContent='แก้ไขหมวดหมู่';$('cdel').hidden=false;$('cdlg').showModal()}
-$('cform').onsubmit=async e=>{e.preventDefault();let id=$('cid').value,d={id,type:$('ctype').value,name:$('cname').value,icon:$('cicon').value};$('cdlg').close();try{await post({action:id?'updateCategory':'addCategory',data:d});await sync(true);toast('บันทึกหมวดหมู่แล้ว')}catch(e){toast('บันทึกหมวดหมู่ไม่สำเร็จ')}};
-$('cdel').onclick=async()=>{let id=$('cid').value;if(!id||!confirm('ลบหมวดหมู่นี้ใช่ไหม? รายการเก่าจะไม่ถูกลบ'))return;$('cdlg').close();try{await post({action:'deleteCategory',id});await sync(true);toast('ลบหมวดหมู่แล้ว')}catch(e){toast('ลบหมวดหมู่ไม่สำเร็จ')}};
-
-$('date').textContent=new Date().toLocaleDateString('th-TH',{weekday:'long',day:'numeric',month:'long',year:'numeric'});cached();sync();document.addEventListener('visibilitychange',()=>{if(!document.hidden)sync(true)});setInterval(()=>sync(true),5000);if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js');
+function editCat(id){const c=S.categories.find(x=>x.id===id);if(!c)return;$('cid').value=id;$('ctype').value=c.type;$('cname').value=c.name;$('cicon').value=c.icon||'📌';$('ctitle').textContent='แก้ไขหมวดหมู่';$('cdel').hidden=false;$('cdlg').showModal()}
+$('cform').onsubmit=async e=>{e.preventDefault();const id=$('cid').value,d={id,type:$('ctype').value,name:$('cname').value,icon:$('cicon').value};$('cdlg').close();try{await apiPost({action:id?'updateCategory':'addCategory',data:d});await sync(true);toast('✓ บันทึกหมวดหมู่แล้ว')}catch(e){toast('บันทึกหมวดหมู่ไม่สำเร็จ')}};
+$('cdel').onclick=async()=>{const id=$('cid').value;if(!id||!confirm('ลบหมวดหมู่นี้ใช่ไหม? รายการเก่าจะยังอยู่'))return;$('cdlg').close();try{await apiPost({action:'deleteCategory',id});await sync(true);toast('✓ ลบหมวดหมู่แล้ว')}catch(e){toast('ลบหมวดหมู่ไม่สำเร็จ')}};
+$('date').textContent=new Date().toLocaleDateString('th-TH',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+loadCache();sync(false);document.addEventListener('visibilitychange',()=>{if(!document.hidden)sync(true)});setInterval(()=>sync(true),8000);
+if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js');

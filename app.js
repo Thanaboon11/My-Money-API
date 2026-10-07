@@ -8,10 +8,21 @@ function saveCache(){localStorage.setItem(cacheKey,JSON.stringify(S));localStora
 function loadCache(){try{const x=JSON.parse(localStorage.getItem(cacheKey));if(x){S=x;render()}Q=JSON.parse(localStorage.getItem(queueKey)||'[]')||[]}catch(e){Q=[]}}
 async function apiGet(){const r=await fetch(API+'?action=bootstrap&_='+Date.now(),{cache:'no-store'});const j=await r.json();if(!j.success)throw Error(j.error||'โหลดไม่สำเร็จ');return j.data}
 async function apiPost(body){const r=await fetch(API,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body)});const j=await r.json();if(!j.success)throw Error(j.error||'บันทึกไม่สำเร็จ');return j}
-function syncState(){ $('sync').textContent=(processing||Q.length)?('● รอซิงก์ '+Q.length+' รายการ'):'● ซิงก์แล้ว' }
+function syncState(){ $('sync').textContent=(processing||Q.length)?'● บันทึกในเครื่องแล้ว':'● ซิงก์แล้ว' }
 async function sync(silent=true){if(processing||Q.length){syncState();return}try{const d=await apiGet();S=d;saveCache();render();syncState()}catch(e){$('sync').textContent='● ออฟไลน์';if(!silent)toast('เชื่อม Google Sheets ไม่สำเร็จ')}}
-function enqueue(body){Q.push(body);saveCache();syncState();processQueue()}
-async function processQueue(){if(processing||!Q.length)return;processing=true;syncState();while(Q.length){try{await apiPost(Q[0]);Q.shift();saveCache();syncState()}catch(e){processing=false;syncState();toast('ข้อมูลเก็บไว้แล้ว รอซิงก์อัตโนมัติ');return}}processing=false;try{const d=await apiGet();S=d;saveCache();render();syncState();toast('✓ ซิงก์เรียบร้อย')}catch(e){syncState()}}
+let queueTimer=null;
+function enqueue(body){Q.push(body);saveCache();syncState();clearTimeout(queueTimer);queueTimer=setTimeout(processQueue,700)}
+async function processQueue(){
+ if(processing||!Q.length)return;
+ processing=true;syncState();
+ const batch=Q.slice();
+ try{
+   await apiPost({action:'batchMutations',items:batch});
+   Q.splice(0,batch.length);saveCache();processing=false;syncState();
+   if(Q.length){queueTimer=setTimeout(processQueue,300);return}
+   try{const d=await apiGet();if(!Q.length){S=d;saveCache();render()}syncState()}catch(e){syncState()}
+ }catch(e){processing=false;syncState();toast('บันทึกไว้ในเครื่องแล้ว จะซิงก์ให้อัตโนมัติ');queueTimer=setTimeout(processQueue,5000)}
+}
 function catName(id){const c=S.categories.find(x=>x.id===id);return c?c.name:id||''}
 function accountName(id){const a=S.accounts.find(x=>x.id===id);return a?a.name:id||''}
 function txRows(a){if(!a.length)return '<div class="empty">ยังไม่มีรายการ</div>';return a.map(t=>`<div class="row tx" data-id="${t.id}"><div class="left"><span class="bubble">${t.type==='รายรับ'?'↓':t.type==='โอนเงิน'?'↔':'↑'}</span><div><b>${t.title||catName(t.category)||t.type}</b><small>${t.source?('จาก '+t.source+' · '):''}${new Date(t.datetime).toLocaleDateString('th-TH')}</small></div></div><b class="${t.type==='รายรับ'?'plus':t.type==='รายจ่าย'?'minus':''}">${t.type==='รายรับ'?'+':t.type==='รายจ่าย'?'-':''}${money(t.amount)}</b></div>`).join('')}
@@ -22,7 +33,7 @@ function render(){
  $('cards').innerHTML=S.accounts.filter(a=>a.status==='ใช้งาน').map(a=>`<div class="card"><span>${a.icon||'💳'}</span><small>${a.name}</small><b>${money(a.balance)}</b></div>`).join('');
  $('recent').innerHTML=txRows(S.transactions.slice(0,6));$('alltx').innerHTML=txRows(filterTx());
  const op=S.accounts.filter(a=>a.status==='ใช้งาน').map(a=>`<option value="${a.id}">${a.icon||''} ${a.name}</option>`).join('');
- $('from').innerHTML=op;$('to').innerHTML=op;$('af').innerHTML='<option value="">ทุกบัญชี</option>'+op;
+ $('from').innerHTML=op;$('af').innerHTML='<option value="">ทุกบัญชี</option>'+op;
  $('accList').innerHTML=S.accounts.map(a=>`<div class="row acc" data-id="${a.id}"><div class="left"><span class="bubble">${a.icon||'💳'}</span><div><b>${a.name}</b><small>${a.accountType}</small></div></div><b>${money(a.balance)}</b></div>`).join('');
  $('catList').innerHTML=catRows();bind();summary();
 }
@@ -31,8 +42,8 @@ function page(p){document.querySelectorAll('.page').forEach(x=>x.classList.toggl
 document.querySelectorAll('.nav,.goto').forEach(x=>x.onclick=()=>page(x.dataset.page));
 function setType(t){
  $('etype').value=t;document.querySelectorAll('.segments button').forEach(x=>x.classList.toggle('on',x.dataset.t===t));
- $('accountLabel').textContent=t==='โอนเงิน'?'โอนจากบัญชี':'บัญชี';
- $('tow').hidden=t!=='โอนเงิน';$('catw').hidden=t==='โอนเงิน';$('sourcew').hidden=t!=='รายรับ';
+ $('accountLabel').textContent='บัญชี';
+ $('catw').hidden=false;$('sourcew').hidden=t!=='รายรับ';
  $('cat').innerHTML=S.categories.filter(c=>c.type===t&&c.status==='ใช้งาน').map(c=>`<option value="${c.id}">${c.icon||''} ${c.name}</option>`).join('');
 }
 function openTx(){
@@ -44,14 +55,14 @@ document.querySelectorAll('.segments button').forEach(x=>x.onclick=()=>setType(x
 $('moreBtn').onclick=()=>{$('moreFields').hidden=!$('moreFields').hidden;$('moreBtn').textContent=$('moreFields').hidden?'+ รายละเอียดเพิ่มเติม':'− ซ่อนรายละเอียด'};
 function editTx(id){
  const t=S.transactions.find(x=>x.id===id);if(!t)return;
- $('eid').value=t.id;$('mtitle').textContent='แก้ไขรายการ';setType(t.type);$('dt').value=(t.datetime||'').slice(0,16);$('amt').value=t.amount;$('from').value=t.fromAccount;$('to').value=t.toAccount||'';$('cat').value=t.category||'';$('source').value=t.source||'';$('desc').value=t.title||'';$('note').value=t.note||'';$('moreFields').hidden=false;$('moreBtn').textContent='− ซ่อนรายละเอียด';$('del').hidden=false;$('dlg').showModal();
+ $('eid').value=t.id;$('mtitle').textContent='แก้ไขรายการ';setType(t.type);$('dt').value=(t.datetime||'').slice(0,16);$('amt').value=t.amount;$('from').value=t.fromAccount;$('cat').value=t.category||'';$('source').value=t.source||'';$('desc').value=t.title||'';$('note').value=t.note||'';$('moreFields').hidden=false;$('moreBtn').textContent='− ซ่อนรายละเอียด';$('del').hidden=false;$('dlg').showModal();
 }
 $('form').onsubmit=e=>{
  e.preventDefault();
  const id0=$('eid').value,t=$('etype').value;
  const id=id0||('TXN-C-'+Date.now()+'-'+Math.random().toString(36).slice(2,7).toUpperCase());
- const d={id,datetime:$('dt').value,type:t,fromAccount:$('from').value,toAccount:t==='โอนเงิน'?$('to').value:'',category:t==='โอนเงิน'?'':$('cat').value,source:t==='รายรับ'?$('source').value.trim():'',title:$('desc').value.trim(),amount:Number($('amt').value),note:$('note').value.trim()};
- if(!d.fromAccount)return toast('กรุณาเลือกบัญชี'); if(!d.amount||d.amount<=0)return toast('กรุณาใส่จำนวนเงิน'); if(t==='โอนเงิน'&&(!d.toAccount||d.toAccount===d.fromAccount))return toast('กรุณาเลือกบัญชีปลายทาง');
+ const d={id,datetime:$('dt').value,type:t,fromAccount:$('from').value,toAccount:'',category:$('cat').value,source:t==='รายรับ'?$('source').value.trim():'',title:$('desc').value.trim(),amount:Number($('amt').value),note:$('note').value.trim()};
+ if(!d.fromAccount)return toast('กรุณาเลือกบัญชี'); if(!d.amount||d.amount<=0)return toast('กรุณาใส่จำนวนเงิน');
  $('dlg').close();
  if(id0)S.transactions=S.transactions.map(x=>x.id===id0?{...x,...d}:x);else S.transactions.unshift(d);
  saveCache();render();enqueue({action:id0?'updateTransaction':'addTransaction',data:d});toast(id0?'แก้ไขแล้ว':'บันทึกแล้ว');

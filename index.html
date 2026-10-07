@@ -1,0 +1,38 @@
+<!doctype html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#f7f5f0"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="My Money">
+<link rel="manifest" href="manifest.json"><link rel="apple-touch-icon" href="icon-192.png"><link rel="stylesheet" href="style.css"><title>My Money</title></head>
+<body><div id="toast"></div><div class="layout"><aside><div class="brand"><img src="icon-192.png"><b>My Money</b></div>
+<button class="nav on" data-page="home">⌂ หน้าหลัก</button><button class="nav" data-page="history">≡ รายการ</button><button class="nav" data-page="summary">▥ สรุปผล</button><button class="nav" data-page="accounts">▣ บัญชี</button>
+<button class="nav" data-page="categories">◉ หมวดหมู่</button></aside>
+<main><header><div><small id="date"></small><h1 id="title">สวัสดี 👋</h1></div><small id="sync">กำลังซิงก์…</small></header>
+<section id="home" class="page on"><article class="hero"><small>ยอดเงินรวมทั้งหมด</small><strong id="total">฿0.00</strong><div class="twocol"><div><span>รายรับเดือนนี้</span><b id="income">฿0</b></div><div><span>รายจ่ายเดือนนี้</span><b id="expense">฿0</b></div></div></article>
+<div class="head"><h2>บัญชีของฉัน</h2></div><div id="cards" class="cards"></div><div class="head"><h2>รายการล่าสุด</h2><button data-page="history" class="goto">ดูทั้งหมด ›</button></div><div id="recent" class="list"></div></section>
+<section id="history" class="page"><div class="filters"><input id="q" placeholder="ค้นหารายการ..."><select id="af"><option value="">ทุกบัญชี</option></select><select id="tf"><option value="">ทุกประเภท</option><option>รายรับ</option><option>รายจ่าย</option><option>โอนเงิน</option></select></div><div id="alltx" class="list"></div></section>
+<section id="summary" class="page"><div class="month"><button id="prev">‹</button><b id="month"></b><button id="next">›</button></div>
+<div class="metrics"><article><small>รายรับ</small><b id="si">฿0</b></article><article><small>รายจ่าย</small><b id="se">฿0</b></article><article><small>สุทธิ</small><b id="sn">฿0</b></article></div>
+<article class="panel"><h2>👩 เงินที่แม่ให้</h2><div class="mother-total"><span>รวมเดือนนี้</span><b id="motherTotal">฿0</b><small id="motherCount">0 ครั้ง</small></div><div id="motherList"></div></article>
+<article class="panel"><h2>รายจ่ายตามหมวดหมู่</h2><div id="cats"></div></article><article class="panel"><h2>ยอดคงเหลือแยกบัญชี</h2><div id="balances"></div></article></section>
+<section id="accounts" class="page"><div class="head"><h2>บัญชีของฉัน</h2><button id="addAcc">+ เพิ่มบัญชี</button></div><div id="accList" class="list"></div></section>
+<section id="categories" class="page">
+<div class="head"><h2>หมวดหมู่</h2><button id="addCat">+ เพิ่มหมวดหมู่</button></div>
+<div class="cat-tabs"><button class="cat-tab on" data-ct="รายจ่าย">รายจ่าย</button><button class="cat-tab" data-ct="รายรับ">รายรับ</button></div>
+<div id="catList" class="list"></div></section>
+</main></div><button id="fab">＋</button>
+<nav class="bottom"><button class="nav on" data-page="home">⌂<span>หน้าหลัก</span></button><button class="nav" data-page="history">≡<span>รายการ</span></button><button id="addMobile">＋<span>บันทึก</span></button><button class="nav" data-page="summary">▥<span>สรุป</span></button><button class="nav" data-page="accounts">▣<span>บัญชี</span></button></nav>
+<dialog id="dlg"><form id="form"><div class="modalhead"><h2 id="mtitle">เพิ่มรายการ</h2><button type="button" id="close">×</button></div><div class="segments"><button type="button" data-t="รายรับ">รายรับ</button><button type="button" data-t="รายจ่าย" class="on">รายจ่าย</button><button type="button" data-t="โอนเงิน">โอนเงิน</button></div>
+<input id="eid" type="hidden"><input id="etype" type="hidden" value="รายจ่าย"><label>วันที่และเวลา<input id="dt" type="datetime-local" required></label><label>จำนวนเงิน<input id="amt" type="number" min=".01" step=".01" required></label><label><span id="accountLabel">บัญชี</span><select id="from"></select></label>
+<label id="tow" hidden>บัญชีปลายทาง<select id="to"></select></label><label id="catw">หมวดหมู่<select id="cat"></select></label><label id="sourcew" hidden>ผู้ให้ / แหล่งรายรับ (ไม่บังคับ)<input id="source" placeholder="เช่น แม่, เงินเดือน, เงินคืน"></label><button type="button" id="moreBtn" class="more-btn">+ รายละเอียดเพิ่มเติม</button>
+<div id="moreFields" hidden>
+<label>ชื่อรายการ (ไม่บังคับ)<input id="desc" placeholder="เช่น ข้าวกลางวัน"></label>
+<label>หมายเหตุ (ไม่บังคับ)<input id="note"></label></div><button class="primary">บันทึก</button><button type="button" id="del" class="danger" hidden>ลบรายการ</button></form></dialog>
+<dialog id="adlg"><form id="aform"><div class="modalhead"><h2>บัญชี</h2><button type="button" id="aclose">×</button></div><input id="aid" type="hidden"><label>ชื่อบัญชี<input id="aname" required></label><label>ประเภท<select id="atype"><option>ธนาคาร</option><option>เงินสด</option><option>กระเป๋าเงินดิจิทัล</option><option>อื่น ๆ</option></select></label><label>ยอดตั้งต้น<input id="opening" type="number" step=".01" value="0"></label><label>ไอคอน<input id="aicon" value="💳"></label><button class="primary">บันทึกบัญชี</button></form></dialog>
+<dialog id="cdlg"><form id="cform">
+<div class="modalhead"><h2 id="ctitle">เพิ่มหมวดหมู่</h2><button type="button" id="cclose">×</button></div>
+<input id="cid" type="hidden">
+<label>ประเภท<select id="ctype"><option>รายจ่าย</option><option>รายรับ</option></select></label>
+<label>ชื่อหมวดหมู่<input id="cname" required placeholder="เช่น กาแฟ"></label>
+<label>ไอคอน<input id="cicon" value="📌"></label>
+<button class="primary">บันทึกหมวดหมู่</button>
+<button type="button" id="cdel" class="danger" hidden>ลบหมวดหมู่</button>
+</form></dialog>
+<script>window.API_URL="https://script.google.com/macros/s/AKfycbyPo8pfzsRpqpZA6WB1IVdqvxkB0CiOe3yzkhNhiSDmwUgGX5I4Y3_g4SHZ2bjRSK3ORw/exec"</script><script src="app.js"></script></body></html>

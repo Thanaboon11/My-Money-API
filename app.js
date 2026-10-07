@@ -1,13 +1,17 @@
 const API=window.API_URL,$=id=>document.getElementById(id);
-let S={accounts:[],categories:[],transactions:[],dashboard:{}},M=new Date(),saving=false;
-const cacheKey='mm-v23-cache';
+let S={accounts:[],categories:[],transactions:[],dashboard:{}},M=new Date(),saving=false,processing=false;
+const cacheKey='mm-final-cache',queueKey='mm-final-queue';
+let Q=[];
 const money=n=>new Intl.NumberFormat('th-TH',{style:'currency',currency:'THB'}).format(Number(n)||0);
 function toast(t){$('toast').textContent=t;$('toast').classList.add('show');setTimeout(()=>$('toast').classList.remove('show'),1800)}
-function saveCache(){localStorage.setItem(cacheKey,JSON.stringify(S))}
-function loadCache(){try{const x=JSON.parse(localStorage.getItem(cacheKey));if(x){S=x;render()}}catch(e){}}
+function saveCache(){localStorage.setItem(cacheKey,JSON.stringify(S));localStorage.setItem(queueKey,JSON.stringify(Q))}
+function loadCache(){try{const x=JSON.parse(localStorage.getItem(cacheKey));if(x){S=x;render()}Q=JSON.parse(localStorage.getItem(queueKey)||'[]')||[]}catch(e){Q=[]}}
 async function apiGet(){const r=await fetch(API+'?action=bootstrap&_='+Date.now(),{cache:'no-store'});const j=await r.json();if(!j.success)throw Error(j.error||'โหลดไม่สำเร็จ');return j.data}
 async function apiPost(body){const r=await fetch(API,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body)});const j=await r.json();if(!j.success)throw Error(j.error||'บันทึกไม่สำเร็จ');return j}
-async function sync(silent=true){try{const d=await apiGet();S=d;saveCache();render();$('sync').textContent='● ซิงก์แล้ว'}catch(e){$('sync').textContent='● รอซิงก์';if(!silent)toast('เชื่อม Google Sheets ไม่สำเร็จ')}}
+function syncState(){ $('sync').textContent=(processing||Q.length)?('● รอซิงก์ '+Q.length+' รายการ'):'● ซิงก์แล้ว' }
+async function sync(silent=true){if(processing||Q.length){syncState();return}try{const d=await apiGet();S=d;saveCache();render();syncState()}catch(e){$('sync').textContent='● ออฟไลน์';if(!silent)toast('เชื่อม Google Sheets ไม่สำเร็จ')}}
+function enqueue(body){Q.push(body);saveCache();syncState();processQueue()}
+async function processQueue(){if(processing||!Q.length)return;processing=true;syncState();while(Q.length){try{await apiPost(Q[0]);Q.shift();saveCache();syncState()}catch(e){processing=false;syncState();toast('ข้อมูลเก็บไว้แล้ว รอซิงก์อัตโนมัติ');return}}processing=false;try{const d=await apiGet();S=d;saveCache();render();syncState();toast('✓ ซิงก์เรียบร้อย')}catch(e){syncState()}}
 function catName(id){const c=S.categories.find(x=>x.id===id);return c?c.name:id||''}
 function accountName(id){const a=S.accounts.find(x=>x.id===id);return a?a.name:id||''}
 function txRows(a){if(!a.length)return '<div class="empty">ยังไม่มีรายการ</div>';return a.map(t=>`<div class="row tx" data-id="${t.id}"><div class="left"><span class="bubble">${t.type==='รายรับ'?'↓':t.type==='โอนเงิน'?'↔':'↑'}</span><div><b>${t.title||catName(t.category)||t.type}</b><small>${t.source?('จาก '+t.source+' · '):''}${new Date(t.datetime).toLocaleDateString('th-TH')}</small></div></div><b class="${t.type==='รายรับ'?'plus':t.type==='รายจ่าย'?'minus':''}">${t.type==='รายรับ'?'+':t.type==='รายจ่าย'?'-':''}${money(t.amount)}</b></div>`).join('')}
@@ -42,26 +46,17 @@ function editTx(id){
  const t=S.transactions.find(x=>x.id===id);if(!t)return;
  $('eid').value=t.id;$('mtitle').textContent='แก้ไขรายการ';setType(t.type);$('dt').value=(t.datetime||'').slice(0,16);$('amt').value=t.amount;$('from').value=t.fromAccount;$('to').value=t.toAccount||'';$('cat').value=t.category||'';$('source').value=t.source||'';$('desc').value=t.title||'';$('note').value=t.note||'';$('moreFields').hidden=false;$('moreBtn').textContent='− ซ่อนรายละเอียด';$('del').hidden=false;$('dlg').showModal();
 }
-$('form').onsubmit=async e=>{
- e.preventDefault();if(saving)return;saving=true;
- const btn=$('form').querySelector('.primary');btn.disabled=true;btn.textContent='บันทึก';
- const id=$('eid').value,t=$('etype').value;
+$('form').onsubmit=e=>{
+ e.preventDefault();
+ const id0=$('eid').value,t=$('etype').value;
+ const id=id0||('TXN-C-'+Date.now()+'-'+Math.random().toString(36).slice(2,7).toUpperCase());
  const d={id,datetime:$('dt').value,type:t,fromAccount:$('from').value,toAccount:t==='โอนเงิน'?$('to').value:'',category:t==='โอนเงิน'?'':$('cat').value,source:t==='รายรับ'?$('source').value.trim():'',title:$('desc').value.trim(),amount:Number($('amt').value),note:$('note').value.trim()};
- // Close instantly; do not make user wait for Sheets.
+ if(!d.fromAccount)return toast('กรุณาเลือกบัญชี'); if(!d.amount||d.amount<=0)return toast('กรุณาใส่จำนวนเงิน'); if(t==='โอนเงิน'&&(!d.toAccount||d.toAccount===d.fromAccount))return toast('กรุณาเลือกบัญชีปลายทาง');
  $('dlg').close();
- const old=JSON.parse(JSON.stringify(S.transactions));
- if(id)S.transactions=S.transactions.map(x=>x.id===id?{...x,...d}:x);else S.transactions.unshift({...d,id:'LOCAL-'+Date.now()});
- render();toast(id?'แก้ไขแล้ว · กำลังซิงก์':'บันทึกแล้ว · กำลังซิงก์');
- try{await apiPost({action:id?'updateTransaction':'addTransaction',data:d});await sync(true);toast('✓ ซิงก์แล้ว')}
- catch(err){S.transactions=old;render();toast('ซิงก์ไม่สำเร็จ กรุณาลองอีกครั้ง')}
- finally{saving=false;btn.disabled=false;btn.textContent='บันทึก'}
+ if(id0)S.transactions=S.transactions.map(x=>x.id===id0?{...x,...d}:x);else S.transactions.unshift(d);
+ saveCache();render();enqueue({action:id0?'updateTransaction':'addTransaction',data:d});toast(id0?'แก้ไขแล้ว':'บันทึกแล้ว');
 };
-$('del').onclick=async()=>{
- const id=$('eid').value;if(!id||!confirm('ลบรายการนี้ใช่ไหม?'))return;
- $('dlg').close();const old=JSON.parse(JSON.stringify(S.transactions));S.transactions=S.transactions.filter(x=>x.id!==id);render();toast('ลบแล้ว · กำลังซิงก์');
- try{await apiPost({action:'deleteTransaction',id});await sync(true);toast('✓ ลบแล้ว')}
- catch(e){S.transactions=old;render();toast('ลบไม่สำเร็จ')}
-};
+$('del').onclick=()=>{const id=$('eid').value;if(!id||!confirm('ลบรายการนี้ใช่ไหม?'))return;$('dlg').close();S.transactions=S.transactions.filter(x=>x.id!==id);saveCache();render();enqueue({action:'deleteTransaction',id});toast('ลบแล้ว')};
 function summary(){
  const y=M.getFullYear(),m=M.getMonth(),a=S.transactions.filter(t=>{const d=new Date(t.datetime);return d.getFullYear()===y&&d.getMonth()===m});
  $('month').textContent=M.toLocaleDateString('th-TH',{month:'long',year:'numeric'});
@@ -85,5 +80,5 @@ function editCat(id){const c=S.categories.find(x=>x.id===id);if(!c)return;$('cid
 $('cform').onsubmit=async e=>{e.preventDefault();const id=$('cid').value,d={id,type:$('ctype').value,name:$('cname').value,icon:$('cicon').value};$('cdlg').close();try{await apiPost({action:id?'updateCategory':'addCategory',data:d});await sync(true);toast('✓ บันทึกหมวดหมู่แล้ว')}catch(e){toast('บันทึกหมวดหมู่ไม่สำเร็จ')}};
 $('cdel').onclick=async()=>{const id=$('cid').value;if(!id||!confirm('ลบหมวดหมู่นี้ใช่ไหม? รายการเก่าจะยังอยู่'))return;$('cdlg').close();try{await apiPost({action:'deleteCategory',id});await sync(true);toast('✓ ลบหมวดหมู่แล้ว')}catch(e){toast('ลบหมวดหมู่ไม่สำเร็จ')}};
 $('date').textContent=new Date().toLocaleDateString('th-TH',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
-loadCache();sync(false);document.addEventListener('visibilitychange',()=>{if(!document.hidden)sync(true)});setInterval(()=>sync(true),8000);
+loadCache();processQueue();if(!Q.length)sync(false);document.addEventListener('visibilitychange',()=>{if(!document.hidden){processQueue();if(!Q.length)sync(true)}});setInterval(()=>{if(Q.length)processQueue();else sync(true)},15000);
 if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js');

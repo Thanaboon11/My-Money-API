@@ -1,6 +1,6 @@
 const API=window.API_URL,$=id=>document.getElementById(id);
 let S={accounts:[],categories:[],transactions:[],dashboard:{}},M=new Date(),saving=false,processing=false;
-const cacheKey='mm-final-cache',queueKey='mm-final-queue';
+const cacheKey='mm-sheet-sync-cache-v2',queueKey='mm-final-queue';
 let Q=[];
 const money=n=>new Intl.NumberFormat('th-TH',{style:'currency',currency:'THB'}).format(Number(n)||0);
 function toast(t){$('toast').textContent=t;$('toast').classList.add('show');setTimeout(()=>$('toast').classList.remove('show'),1800)}
@@ -73,9 +73,11 @@ function summary(){
  $('month').textContent=M.toLocaleDateString('th-TH',{month:'long',year:'numeric'});
  let inc=0,exp=0,c={};a.forEach(t=>{if(t.type==='รายรับ')inc+=Number(t.amount)||0;if(t.type==='รายจ่าย'){exp+=Number(t.amount)||0;c[t.category]=(c[t.category]||0)+(Number(t.amount)||0)}});
  $('si').textContent=money(inc);$('se').textContent=money(exp);$('sn').textContent=money(inc-exp);
- const mom=a.filter(t=>t.type==='รายรับ'&&((t.source||'').trim().includes('แม่')||(t.title||'').trim().includes('แม่')));
+ const thaiNorm=v=>String(v||'').normalize('NFC').replace(/[\s\u200B-\u200D\uFEFF]/g,'').toLowerCase();
+ const isMother=t=>{const text=[t.source,t.title,t.note,catName(t.category)].map(thaiNorm).join('|');return t.type==='รายรับ'&&text.includes('แม่')};
+ const mom=a.filter(isMother);
  $('motherTotal').textContent=money(mom.reduce((s,t)=>s+(Number(t.amount)||0),0));$('motherCount').textContent=mom.length+' ครั้ง';
- $('motherList').innerHTML=mom.length?mom.map(t=>`<div class="minirow"><span>${new Date(t.datetime).toLocaleDateString('th-TH')} · ${t.title||'แม่ให้เงิน'} · ${accountName(t.fromAccount)}</span><b>${money(t.amount)}</b></div>`).join(''):'<div class="empty">เดือนนี้ยังไม่มีรายการจากแม่</div>';
+ $('motherList').innerHTML=mom.length?mom.map(t=>`<div class="minirow"><span>${new Date(t.datetime).toLocaleDateString('th-TH')} · ${t.source||t.title||'แม่ให้เงิน'} · ${accountName(t.fromAccount)}</span><b>${money(t.amount)}</b></div>`).join(''):'<div class="empty">เดือนนี้ยังไม่มีรายการจากแม่</div>';
  const mx=Math.max(1,...Object.values(c));$('cats').innerHTML=Object.keys(c).length?Object.entries(c).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<div class="barline"><div class="barhead"><span>${catName(k)}</span><b>${money(v)}</b></div><div class="bar"><i style="width:${v/mx*100}%"></i></div></div>`).join(''):'<div class="empty">ยังไม่มีรายจ่าย</div>';
  $('balances').innerHTML=S.accounts.map(x=>`<div class="minirow"><span>${x.icon||'💳'} ${x.name}</span><b>${money(x.balance)}</b></div>`).join('');
 }
@@ -91,5 +93,5 @@ function editCat(id){const c=S.categories.find(x=>x.id===id);if(!c)return;$('cid
 $('cform').onsubmit=async e=>{e.preventDefault();const id=$('cid').value,d={id,type:$('ctype').value,name:$('cname').value,icon:$('cicon').value};$('cdlg').close();try{await apiPost({action:id?'updateCategory':'addCategory',data:d});await sync(true);toast('✓ บันทึกหมวดหมู่แล้ว')}catch(e){toast('บันทึกหมวดหมู่ไม่สำเร็จ')}};
 $('cdel').onclick=async()=>{const id=$('cid').value;if(!id||!confirm('ลบหมวดหมู่นี้ใช่ไหม? รายการเก่าจะยังอยู่'))return;$('cdlg').close();try{await apiPost({action:'deleteCategory',id});await sync(true);toast('✓ ลบหมวดหมู่แล้ว')}catch(e){toast('ลบหมวดหมู่ไม่สำเร็จ')}};
 $('date').textContent=new Date().toLocaleDateString('th-TH',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
-loadCache();processQueue();if(!Q.length)sync(false);document.addEventListener('visibilitychange',()=>{if(!document.hidden){processQueue();if(!Q.length)sync(true)}});setInterval(()=>{if(Q.length)processQueue();else sync(true)},15000);
+loadCache();processQueue();if(!Q.length)sync(false);document.addEventListener('visibilitychange',()=>{if(!document.hidden){processQueue();if(!Q.length)sync(true)}});window.addEventListener('focus',()=>{if(!Q.length)sync(true)});window.addEventListener('pageshow',()=>{if(!Q.length)sync(true)});setInterval(()=>{if(Q.length)processQueue();else sync(true)},4000);
 if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js');

@@ -1,12 +1,20 @@
-MY MONEY — แก้หน้ากรอกและหัวตารางภาษาไทย
+MY MONEY — แก้แอปและเพิ่มชีตอ่านภาษาไทย
 
-1. สำรอง Google Sheets ก่อน และรอรายการค้างซิงก์
-2. อัปโหลดไฟล์เว็บจาก ZIP ไป GitHub Pages (ยกเว้น Code.gs และ README.txt)
-3. Apps Script: แทน Code.gs เดิมด้วยไฟล์ Code.gs จาก ZIP แต่เก็บ ImportHistory.gs เดิมไว้
-4. เลือกฟังก์ชัน setThaiSheetHeaders และ Run หนึ่งครั้ง เพื่อแปลหัวตาราง
-5. เลือก inspectKrungthaiBalance และ Run จากนั้นดู Execution log เพื่อเช็กยอดและรายการ 118.25
-6. Deploy > Manage deployments > Edit > New version > Deploy
+สำรอง Google Sheets และรอรายการในมือถือซิงก์ให้หมดก่อน
 
-เอาช่องผู้ให้/แหล่งรายรับออกจากแอปแล้ว ใช้ชื่อรายการแทน
-รหัสบัญชีและรหัสหมวดหมู่ยังเป็นอังกฤษเพื่อไม่ให้การเชื่อมโยงพัง ชื่อหมวดหมู่ภาษาไทยอยู่ใน Categories
-ไม่ได้ปรับยอดตั้งต้นหรือเพิ่มรายการ 118.25 ซ้ำ เพราะต้องตรวจว่าเหตุใดยอดไม่เปลี่ยนก่อน
+GITHUB PAGES:
+1. อัปโหลด index.html, app.js, style.css, sw.js, manifest.json, icon-192.png, icon-512.png ไปทับไฟล์เดิมใน repository My-Money-API
+2. สำคัญ: ต้องใช้ชื่อ manifest.json และ index.html ตามนี้ ไม่ใช่ชื่อที่มีวงเล็บ
+3. รอ GitHub Pages อัปเดต แล้วเปิด URL จริงใน Chrome Android
+4. ตรวจ Chrome > เมนู > ติดตั้งแอป / เพิ่มไปยังหน้าจอหลัก
+
+GOOGLE SHEETS:
+1. ใน Apps Script เพิ่มไฟล์สคริปต์ใหม่ชื่อ ThaiView.gs และวางโค้ดจากไฟล์ ThaiView.gs ใน ZIP
+2. บันทึก เลือกฟังก์ชัน createThaiReadableHistory แล้วกด Run
+3. กลับไป Google Sheets จะเห็นแท็บ "ประวัติภาษาไทย" ซึ่งอ่านชื่อบัญชีและหมวดหมู่เป็นไทย
+4. เมื่อมีรายการใหม่ ให้รัน createThaiReadableHistory อีกครั้งเพื่ออัปเดตแท็บอ่านง่าย
+
+ห้ามแปลรหัส ACC-KTB / EXP-FOOD / LEGACY... ในแท็บ Transactions ต้นฉบับโดยตรง เพราะเป็น ID เชื่อมกับแอป
+ฟังก์ชันนี้สร้างแท็บอ่านง่าย ไม่แตะข้อมูลเดิม
+
+ข้อจำกัด Android: การเปลี่ยน id และแก้ manifest ไม่รับประกันว่า Chrome จะเลิกแสดง "ติดตั้งแล้ว" เพราะสถานะอาจถูกจัดการโดย Chrome/ระบบปฏิบัติการหรือมีแอปเดิมค้างอยู่ การตรวจสอบต้องทำจาก Chrome บนมือถือจริง

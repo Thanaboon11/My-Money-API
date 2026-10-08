@@ -121,4 +121,4 @@ $('cform').onsubmit=async e=>{e.preventDefault();const id=$('cid').value,d={id,t
 $('cdel').onclick=async()=>{const id=$('cid').value;if(!id||!confirm('ลบหมวดหมู่นี้ใช่ไหม? รายการเก่าจะยังอยู่'))return;$('cdlg').close();try{await apiPost({action:'deleteCategory',id});await sync(true);toast('✓ ลบหมวดหมู่แล้ว')}catch(e){toast('ลบหมวดหมู่ไม่สำเร็จ')}};
 $('date').textContent=new Date().toLocaleDateString('th-TH',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
 loadCache();processQueue();if(!Q.length)sync(false);document.addEventListener('visibilitychange',()=>{if(!document.hidden){processQueue();if(!Q.length)sync(true)}});window.addEventListener('focus',()=>{if(!Q.length)sync(true)});window.addEventListener('pageshow',()=>{if(!Q.length)sync(true)});setInterval(()=>{if(Q.length)processQueue();else sync(true)},4000);
-if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js');
+if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js?v=money-v4');

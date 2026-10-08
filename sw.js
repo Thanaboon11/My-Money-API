@@ -1,4 +1,4 @@
-const CACHE = 'my-money-v4-fixed';
+const CACHE = 'my-money-20261009-network-first';
 const ASSETS = [
   './',
   './index.html',
@@ -29,6 +29,6 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET' || new URL(e.request.url).origin !== self.location.origin) return;
   e.respondWith(
-    caches.match(e.request).then((res) => res || fetch(e.request))
+    fetch(e.request).catch(() => caches.match(e.request))
   );
 });

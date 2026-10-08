@@ -9,19 +9,36 @@ function loadCache(){try{const x=JSON.parse(localStorage.getItem(cacheKey));if(x
 async function apiGet(){const r=await fetch(API+'?action=bootstrap&_='+Date.now(),{cache:'no-store'});const j=await r.json();if(!j.success)throw Error(j.error||'โหลดไม่สำเร็จ');return j.data}
 async function apiPost(body){const r=await fetch(API,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body)});const j=await r.json();if(!j.success)throw Error(j.error||'บันทึกไม่สำเร็จ');return j}
 function syncState(){ $('sync').textContent=(processing||Q.length)?'● บันทึกในเครื่องแล้ว':'● ซิงก์แล้ว' }
-async function sync(silent=true){if(processing||Q.length){syncState();return}try{const d=await apiGet();S=d;saveCache();render();syncState()}catch(e){$('sync').textContent='● ออฟไลน์';if(!silent)toast('เชื่อม Google Sheets ไม่สำเร็จ')}}
-let queueTimer=null;
-function enqueue(body){Q.push(body);saveCache();syncState();clearTimeout(queueTimer);queueTimer=setTimeout(processQueue,700)}
+async function sync(silent=true){
+ if(processing||Q.length)return;
+ if(syncing)return;
+ syncing=true;const generation=requestGeneration;
+ try{
+  const d=await apiGet();
+  if(!processing&&!Q.length&&generation===requestGeneration){S=d;saveCache();render();syncState()}
+ }catch(e){$('sync').textContent='● ออฟไลน์';if(!silent)toast('เชื่อม Google Sheets ไม่สำเร็จ')}
+ finally{syncing=false}
+}
+let queueTimer=null, syncing=false, requestGeneration=0;
+function enqueue(body){
+ requestGeneration++;Q.push(body);saveCache();syncState();clearTimeout(queueTimer);
+ queueTimer=setTimeout(processQueue,100);
+}
 async function processQueue(){
  if(processing||!Q.length)return;
  processing=true;syncState();
- const batch=Q.slice();
- try{
-   await apiPost({action:'batchMutations',items:batch});
-   Q.splice(0,batch.length);saveCache();processing=false;syncState();
-   if(Q.length){queueTimer=setTimeout(processQueue,300);return}
-   try{const d=await apiGet();if(!Q.length){S=d;saveCache();render()}syncState()}catch(e){syncState()}
- }catch(e){processing=false;syncState();toast('บันทึกไว้ในเครื่องแล้ว จะซิงก์ให้อัตโนมัติ');queueTimer=setTimeout(processQueue,5000)}
+ while(Q.length){
+  const job=Q[0];
+  try{
+   await apiPost(job);
+   Q.shift();saveCache();syncState();
+  }catch(e){
+   processing=false;syncState();
+   toast('ส่งข้อมูลไม่สำเร็จ รายการยังเก็บในเครื่อง');
+   queueTimer=setTimeout(processQueue,12000);return;
+  }
+ }
+ processing=false;syncState();await sync(true);
 }
 function catName(id){const c=S.categories.find(x=>x.id===id);return c?c.name:id||''}
 function accountName(id){const a=S.accounts.find(x=>x.id===id);return a?a.name:id||''}
@@ -29,7 +46,17 @@ function txRows(a){if(!a.length)return '<div class="empty">ยังไม่ม
 function filterTx(){const q=$('q').value.toLowerCase(),a=$('af').value,t=$('tf').value;return S.transactions.filter(x=>(!q||((x.title||'')+(x.note||'')+(x.source||'')+catName(x.category)).toLowerCase().includes(q))&&(!a||(x.fromAccount===a||x.toAccount===a))&&(!t||x.type===t))}
 function catRows(){const b=document.querySelector('.cat-tab.on'),typ=b?b.dataset.ct:'รายจ่าย';const a=S.categories.filter(c=>c.type===typ&&c.status==='ใช้งาน');return a.length?a.map(c=>`<div class="row cat-edit" data-id="${c.id}"><div class="left"><span class="bubble">${c.icon||'📌'}</span><div><b>${c.name}</b><small>${c.type}</small></div></div><span>แก้ไข ›</span></div>`).join(''):'<div class="empty">ยังไม่มีหมวดหมู่</div>'}
 function render(){
- const d=S.dashboard||{};$('total').textContent=money(d.totalBalance);$('income').textContent=money(d.income);$('expense').textContent=money(d.expense);
+ const now=new Date();let income=0,expense=0;
+ const balances=Object.fromEntries(S.accounts.map(a=>[a.id,Number(a.openingBalance)||0]));
+ S.transactions.forEach(t=>{const v=Number(t.amount)||0,dt=new Date(t.datetime);
+ if(dt.getMonth()===now.getMonth()&&dt.getFullYear()===now.getFullYear()){
+ if(t.type==='รายรับ')income+=v;else if(t.type==='รายจ่าย')expense+=v;
+ }
+ if(t.type==='รายรับ'&&balances[t.fromAccount]!==undefined)balances[t.fromAccount]+=v;
+ if(t.type==='รายจ่าย'&&balances[t.fromAccount]!==undefined)balances[t.fromAccount]-=v;
+ });
+ S.accounts.forEach(a=>a.balance=balances[a.id]??a.balance);
+ const d={income,expense,totalBalance:Object.values(balances).reduce((a,b)=>a+b,0)};$('total').textContent=money(d.totalBalance);$('income').textContent=money(d.income);$('expense').textContent=money(d.expense);
  $('cards').innerHTML=S.accounts.filter(a=>a.status==='ใช้งาน').map(a=>`<div class="card"><span>${a.icon||'💳'}</span><small>${a.name}</small><b>${money(a.balance)}</b></div>`).join('');
  $('recent').innerHTML=txRows(S.transactions.slice(0,6));$('alltx').innerHTML=txRows(filterTx());
  const op=S.accounts.filter(a=>a.status==='ใช้งาน').map(a=>`<option value="${a.id}">${a.icon||''} ${a.name}</option>`).join('');

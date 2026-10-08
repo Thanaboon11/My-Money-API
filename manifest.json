@@ -1,7 +1,7 @@
 {
-  "name": "My Money — รายรับรายจ่าย",
-  "short_name": "My Money",
-  "id": "./?v=money-v4",
+  "name": "My Money V2",
+  "short_name": "MyMoneyV2",
+  "id": "/mymoney-new-install/",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

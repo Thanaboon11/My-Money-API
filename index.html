@@ -1,6 +1,6 @@
 <!doctype html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#f7f5f0"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="My Money">
-<<link rel="manifest" href="manifest.json?v=money-v4"><ifest.json?v=link rel="apple-touch-icon" href="icon-192.png"><link rel="stylesheet" href="style.css"><title>My Money</title></head>
+<link rel="manifest" href="manifest.json?v=20261009"><link rel="apple-touch-icon" href="icon-192.png"><link rel="stylesheet" href="style.css"><title>My Money</title></head>
 <body><div id="toast"></div><div class="layout"><aside><div class="brand"><img src="icon-192.png"><b>My Money</b></div>
 <button class="nav on" data-page="home">⌂ หน้าหลัก</button><button class="nav" data-page="history">≡ รายการ</button><button class="nav" data-page="summary">▥ สรุปผล</button><button class="nav" data-page="accounts">▣ บัญชี</button>
 <button class="nav" data-page="categories">◉ หมวดหมู่</button></aside>
@@ -21,9 +21,9 @@
 <nav class="bottom"><button class="nav on" data-page="home">⌂<span>หน้าหลัก</span></button><button class="nav" data-page="history">≡<span>รายการ</span></button><button id="addMobile">＋<span>บันทึก</span></button><button class="nav" data-page="summary">▥<span>สรุป</span></button><button class="nav" data-page="accounts">▣<span>บัญชี</span></button></nav>
 <dialog id="dlg"><form id="form"><div class="modalhead"><h2 id="mtitle">เพิ่มรายการ</h2><button type="button" id="close">×</button></div><div class="segments"><button type="button" data-t="รายรับ">รายรับ</button><button type="button" data-t="รายจ่าย" class="on">รายจ่าย</button></div>
 <input id="eid" type="hidden"><input id="etype" type="hidden" value="รายจ่าย"><label>วันที่และเวลา<input id="dt" type="datetime-local" required></label><label>จำนวนเงิน<input id="amt" type="number" min=".01" step=".01" required></label><label><span id="accountLabel">บัญชี</span><select id="from"></select></label>
-<span id="tow" hidden><select id="to"></select></span><label id="catw">หมวดหมู่<select id="cat"></select></label><button type="button" id="moreBtn" class="more-btn">+ รายละเอียดเพิ่มเติม</button>
+<span id="tow" hidden><select id="to"></select></span><label id="catw">หมวดหมู่<select id="cat"></select></label><label>รายการ<input id="desc" placeholder="เช่น แม่ให้, ข้าวกลางวัน" required></label><button type="button" id="moreBtn" class="more-btn">+ รายละเอียดเพิ่มเติม</button>
 <div id="moreFields" hidden>
-<label>ชื่อรายการ (ไม่บังคับ)<input id="desc" placeholder="เช่น ข้าวกลางวัน"></label>
+
 <label>หมายเหตุ (ไม่บังคับ)<input id="note"></label></div><button class="primary">บันทึก</button><button type="button" id="del" class="danger" hidden>ลบรายการ</button></form></dialog>
 <dialog id="adlg"><form id="aform"><div class="modalhead"><h2>บัญชี</h2><button type="button" id="aclose">×</button></div><input id="aid" type="hidden"><label>ชื่อบัญชี<input id="aname" required></label><label>ประเภท<select id="atype"><option>ธนาคาร</option><option>เงินสด</option><option>กระเป๋าเงินดิจิทัล</option><option>อื่น ๆ</option></select></label><label>ยอดตั้งต้น<input id="opening" type="number" step=".01" value="0"></label><label>ไอคอน<input id="aicon" value="💳"></label><button class="primary">บันทึกบัญชี</button></form></dialog>
 <dialog id="cdlg"><form id="cform">
@@ -35,4 +35,4 @@
 <button class="primary">บันทึกหมวดหมู่</button>
 <button type="button" id="cdel" class="danger" hidden>ลบหมวดหมู่</button>
 </form></dialog>
-<script>window.API_URL="https://script.google.com/macros/s/AKfycbyPo8pfzsRpqpZA6WB1IVdqvxkB0CiOe3yzkhNhiSDmwUgGX5I4Y3_g4SHZ2bjRSK3ORw/exec"</script><script src="app.js?v=install-v2"></script></body></html>
+<script>window.API_URL="https://script.google.com/macros/s/AKfycbyPo8pfzsRpqpZA6WB1IVdqvxkB0CiOe3yzkhNhiSDmwUgGX5I4Y3_g4SHZ2bjRSK3ORw/exec"</script><script src="app.js?v=20261009"></script></body></html>

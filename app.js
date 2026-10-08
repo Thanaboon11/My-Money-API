@@ -89,7 +89,7 @@ $('form').onsubmit=e=>{
  const id0=$('eid').value,t=$('etype').value;
  const id=id0||('TXN-C-'+Date.now()+'-'+Math.random().toString(36).slice(2,7).toUpperCase());
  const d={id,datetime:$('dt').value,type:t,fromAccount:$('from').value,toAccount:'',category:$('cat').value,source:'',title:$('desc').value.trim(),amount:Number($('amt').value),note:$('note').value.trim()};
- if(!d.fromAccount)return toast('กรุณาเลือกบัญชี'); if(!d.amount||d.amount<=0)return toast('กรุณาใส่จำนวนเงิน');
+ if(!d.title)return toast('กรุณากรอกรายการ'); if(!d.fromAccount)return toast('กรุณาเลือกบัญชี'); if(!d.amount||d.amount<=0)return toast('กรุณาใส่จำนวนเงิน');
  $('dlg').close();
  if(id0)S.transactions=S.transactions.map(x=>x.id===id0?{...x,...d}:x);else S.transactions.unshift(d);
  saveCache();render();enqueue({action:id0?'updateTransaction':'addTransaction',data:d});toast(id0?'แก้ไขแล้ว':'บันทึกแล้ว');
@@ -121,4 +121,4 @@ $('cform').onsubmit=async e=>{e.preventDefault();const id=$('cid').value,d={id,t
 $('cdel').onclick=async()=>{const id=$('cid').value;if(!id||!confirm('ลบหมวดหมู่นี้ใช่ไหม? รายการเก่าจะยังอยู่'))return;$('cdlg').close();try{await apiPost({action:'deleteCategory',id});await sync(true);toast('✓ ลบหมวดหมู่แล้ว')}catch(e){toast('ลบหมวดหมู่ไม่สำเร็จ')}};
 $('date').textContent=new Date().toLocaleDateString('th-TH',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
 loadCache();processQueue();if(!Q.length)sync(false);document.addEventListener('visibilitychange',()=>{if(!document.hidden){processQueue();if(!Q.length)sync(true)}});window.addEventListener('focus',()=>{if(!Q.length)sync(true)});window.addEventListener('pageshow',()=>{if(!Q.length)sync(true)});setInterval(()=>{if(Q.length)processQueue();else sync(true)},4000);
-if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js?v=money-v4');
+if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js?v=20261009');

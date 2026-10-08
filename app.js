@@ -42,7 +42,7 @@ async function processQueue(){
 }
 function catName(id){const c=S.categories.find(x=>x.id===id);return c?c.name:id||''}
 function accountName(id){const a=S.accounts.find(x=>x.id===id);return a?a.name:id||''}
-function txRows(a){if(!a.length)return '<div class="empty">ยังไม่มีรายการ</div>';return a.map(t=>`<div class="row tx" data-id="${t.id}"><div class="left"><span class="bubble">${t.type==='รายรับ'?'↓':t.type==='โอนเงิน'?'↔':'↑'}</span><div><b>${t.title||catName(t.category)||t.type}</b><small>${t.source?('จาก '+t.source+' · '):''}${new Date(t.datetime).toLocaleDateString('th-TH')}</small></div></div><b class="${t.type==='รายรับ'?'plus':t.type==='รายจ่าย'?'minus':''}">${t.type==='รายรับ'?'+':t.type==='รายจ่าย'?'-':''}${money(t.amount)}</b></div>`).join('')}
+function txRows(a){if(!a.length)return '<div class="empty">ยังไม่มีรายการ</div>';return a.map(t=>`<div class="row tx" data-id="${t.id}"><div class="left"><span class="bubble">${t.type==='รายรับ'?'↓':t.type==='โอนเงิน'?'↔':'↑'}</span><div><b>${t.title||catName(t.category)||t.type}</b><small>${new Date(t.datetime).toLocaleDateString('th-TH')}</small></div></div><b class="${t.type==='รายรับ'?'plus':t.type==='รายจ่าย'?'minus':''}">${t.type==='รายรับ'?'+':t.type==='รายจ่าย'?'-':''}${money(t.amount)}</b></div>`).join('')}
 function filterTx(){const q=$('q').value.toLowerCase(),a=$('af').value,t=$('tf').value;return S.transactions.filter(x=>(!q||((x.title||'')+(x.note||'')+(x.source||'')+catName(x.category)).toLowerCase().includes(q))&&(!a||(x.fromAccount===a||x.toAccount===a))&&(!t||x.type===t))}
 function catRows(){const b=document.querySelector('.cat-tab.on'),typ=b?b.dataset.ct:'รายจ่าย';const a=S.categories.filter(c=>c.type===typ&&c.status==='ใช้งาน');return a.length?a.map(c=>`<div class="row cat-edit" data-id="${c.id}"><div class="left"><span class="bubble">${c.icon||'📌'}</span><div><b>${c.name}</b><small>${c.type}</small></div></div><span>แก้ไข ›</span></div>`).join(''):'<div class="empty">ยังไม่มีหมวดหมู่</div>'}
 function render(){
@@ -61,7 +61,7 @@ function render(){
  $('recent').innerHTML=txRows(S.transactions.slice(0,6));$('alltx').innerHTML=txRows(filterTx());
  const op=S.accounts.filter(a=>a.status==='ใช้งาน').map(a=>`<option value="${a.id}">${a.icon||''} ${a.name}</option>`).join('');
  $('from').innerHTML=op;$('af').innerHTML='<option value="">ทุกบัญชี</option>'+op;
- $('accList').innerHTML=S.accounts.map(a=>`<div class="row acc" data-id="${a.id}"><div class="left"><span class="bubble">${a.icon||'💳'}</span><div><b>${a.name}</b><small>${a.accountType}</small></div></div><b>${money(a.balance)}</b></div>`).join('');
+ $('accList').innerHTML=S.accounts.filter(a=>a.status==='ใช้งาน').map(a=>`<div class="row acc" data-id="${a.id}"><div class="left"><span class="bubble">${a.icon||'💳'}</span><div><b>${a.name}</b><small>${a.accountType}</small></div></div><b>${money(a.balance)}</b></div>`).join('');
  $('catList').innerHTML=catRows();bind();summary();
 }
 function bind(){document.querySelectorAll('.tx').forEach(x=>x.onclick=()=>editTx(x.dataset.id));document.querySelectorAll('.acc').forEach(x=>x.onclick=()=>editAcc(x.dataset.id));document.querySelectorAll('.cat-edit').forEach(x=>x.onclick=()=>editCat(x.dataset.id))}
@@ -70,7 +70,7 @@ document.querySelectorAll('.nav,.goto').forEach(x=>x.onclick=()=>page(x.dataset.
 function setType(t){
  $('etype').value=t;document.querySelectorAll('.segments button').forEach(x=>x.classList.toggle('on',x.dataset.t===t));
  $('accountLabel').textContent='บัญชี';
- $('catw').hidden=false;$('sourcew').hidden=t!=='รายรับ';
+ $('catw').hidden=false;
  $('cat').innerHTML=S.categories.filter(c=>c.type===t&&c.status==='ใช้งาน').map(c=>`<option value="${c.id}">${c.icon||''} ${c.name}</option>`).join('');
 }
 function openTx(){
@@ -82,13 +82,13 @@ document.querySelectorAll('.segments button').forEach(x=>x.onclick=()=>setType(x
 $('moreBtn').onclick=()=>{$('moreFields').hidden=!$('moreFields').hidden;$('moreBtn').textContent=$('moreFields').hidden?'+ รายละเอียดเพิ่มเติม':'− ซ่อนรายละเอียด'};
 function editTx(id){
  const t=S.transactions.find(x=>x.id===id);if(!t)return;
- $('eid').value=t.id;$('mtitle').textContent='แก้ไขรายการ';setType(t.type);$('dt').value=(t.datetime||'').slice(0,16);$('amt').value=t.amount;$('from').value=t.fromAccount;$('cat').value=t.category||'';$('source').value=t.source||'';$('desc').value=t.title||'';$('note').value=t.note||'';$('moreFields').hidden=false;$('moreBtn').textContent='− ซ่อนรายละเอียด';$('del').hidden=false;$('dlg').showModal();
+ $('eid').value=t.id;$('mtitle').textContent='แก้ไขรายการ';setType(t.type);$('dt').value=(t.datetime||'').slice(0,16);$('amt').value=t.amount;$('from').value=t.fromAccount;$('cat').value=t.category||'';$('desc').value=t.title||'';$('note').value=t.note||'';$('moreFields').hidden=false;$('moreBtn').textContent='− ซ่อนรายละเอียด';$('del').hidden=false;$('dlg').showModal();
 }
 $('form').onsubmit=e=>{
  e.preventDefault();
  const id0=$('eid').value,t=$('etype').value;
  const id=id0||('TXN-C-'+Date.now()+'-'+Math.random().toString(36).slice(2,7).toUpperCase());
- const d={id,datetime:$('dt').value,type:t,fromAccount:$('from').value,toAccount:'',category:$('cat').value,source:t==='รายรับ'?$('source').value.trim():'',title:$('desc').value.trim(),amount:Number($('amt').value),note:$('note').value.trim()};
+ const d={id,datetime:$('dt').value,type:t,fromAccount:$('from').value,toAccount:'',category:$('cat').value,source:'',title:$('desc').value.trim(),amount:Number($('amt').value),note:$('note').value.trim()};
  if(!d.fromAccount)return toast('กรุณาเลือกบัญชี'); if(!d.amount||d.amount<=0)return toast('กรุณาใส่จำนวนเงิน');
  $('dlg').close();
  if(id0)S.transactions=S.transactions.map(x=>x.id===id0?{...x,...d}:x);else S.transactions.unshift(d);
@@ -106,7 +106,7 @@ function summary(){
  $('motherTotal').textContent=money(mom.reduce((s,t)=>s+(Number(t.amount)||0),0));$('motherCount').textContent=mom.length+' ครั้ง';
  $('motherList').innerHTML=mom.length?mom.map(t=>`<div class="minirow"><span>${new Date(t.datetime).toLocaleDateString('th-TH')} · ${t.source||t.title||'แม่ให้เงิน'} · ${accountName(t.fromAccount)}</span><b>${money(t.amount)}</b></div>`).join(''):'<div class="empty">เดือนนี้ยังไม่มีรายการจากแม่</div>';
  const mx=Math.max(1,...Object.values(c));$('cats').innerHTML=Object.keys(c).length?Object.entries(c).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<div class="barline"><div class="barhead"><span>${catName(k)}</span><b>${money(v)}</b></div><div class="bar"><i style="width:${v/mx*100}%"></i></div></div>`).join(''):'<div class="empty">ยังไม่มีรายจ่าย</div>';
- $('balances').innerHTML=S.accounts.map(x=>`<div class="minirow"><span>${x.icon||'💳'} ${x.name}</span><b>${money(x.balance)}</b></div>`).join('');
+ $('balances').innerHTML=S.accounts.filter(x=>x.status==='ใช้งาน').map(x=>`<div class="minirow"><span>${x.icon||'💳'} ${x.name}</span><b>${money(x.balance)}</b></div>`).join('');
 }
 $('prev').onclick=()=>{M.setMonth(M.getMonth()-1);summary()};$('next').onclick=()=>{M.setMonth(M.getMonth()+1);summary()};
 ['q','af','tf'].forEach(id=>$(id).addEventListener(id==='q'?'input':'change',()=>{$('alltx').innerHTML=txRows(filterTx());bind()}));

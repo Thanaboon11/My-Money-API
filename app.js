@@ -9,8 +9,9 @@ function saveCache(){localStorage.setItem(cacheKey,JSON.stringify(S));localStora
 function loadCache(){try{const x=JSON.parse(localStorage.getItem(cacheKey));if(x){S=x;render()}Q=JSON.parse(localStorage.getItem(queueKey)||'[]')||[]}catch(e){Q=[]}}
 async function apiGet(){const r=await fetch(API+'?action=bootstrap&_='+Date.now(),{cache:'no-store'});const j=await r.json();if(!j.success)throw Error(j.error||'โหลดไม่สำเร็จ');return j.data}
 async function apiPost(body){const r=await fetch(API,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body)});const j=await r.json();if(!j.success)throw Error(j.error||'บันทึกไม่สำเร็จ');return j}
-function syncState(){ $('sync').textContent=Q.length?'● รอส่ง '+Q.length+' รายการ':processing?'● กำลังซิงก์':'● ซิงก์แล้ว' }
+function syncState(){ $('sync').textContent=Q.length?'● รอซิงก์ '+Q.length+' รายการ':processing?'● กำลังซิงก์':lastSyncError?'● เชื่อมต่อไม่สำเร็จ':'● ซิงก์แล้ว'; $('sync').title=lastSyncError||'ข้อมูลล่าสุดจาก Google Sheets'; }
 let queueTimer=null, syncing=false, requestGeneration=0, lastSyncError='';
+let lastQueueWarningKey='', lastSuccessfulSync=0;
 function overlayPending(server){
  const next={...server,accounts:server.accounts||[],categories:server.categories||[],transactions:[...(server.transactions||[])]};
  for(const job of Q){
@@ -30,8 +31,8 @@ async function sync(silent=true){
   // Always refresh account/category metadata even if transactions are pending.
   // Preserve local edits until the server confirms their mutation.
   S=overlayPending(server);
-  saveCache();render();syncState();lastSyncError='';
- }catch(e){lastSyncError=String(e.message||e);$('sync').textContent='● ซิงก์ไม่ได้';if(!silent)toast('เชื่อม Google Sheets ไม่สำเร็จ')}
+  saveCache();render();lastSyncError='';lastSuccessfulSync=Date.now();syncState();
+ }catch(e){lastSyncError=String(e.message||e);syncState();if(!silent && !lastQueueWarningKey)toast('เชื่อม Google Sheets ไม่สำเร็จ')}
  finally{syncing=false}
 }
 function enqueue(body){
@@ -57,11 +58,12 @@ async function processQueue(){
     alreadyDone=['type','fromAccount','toAccount','category','title','note'].every(k=>String(existing[k]||'')===String(d[k]||''))&&Math.abs(Number(existing.amount)-Number(d.amount))<0.001;
    }
    if(!alreadyDone)await apiPost(job);
-   Q.shift();saveCache();syncState();lastSyncError='';
+   Q.shift();lastQueueWarningKey='';lastSyncError='';saveCache();syncState();
   }catch(e){
    lastSyncError=String(e.message||e);
    processing=false;syncState();
-   toast('ยังมีรายการรอซิงก์ — ไม่ต้องบันทึกซ้ำ');
+   const warningKey=String(job.action)+':'+String(job.id||(job.data&&job.data.id)||'')+':'+lastSyncError;
+   if(warningKey!==lastQueueWarningKey){lastQueueWarningKey=warningKey;toast('มีรายการรอซิงก์ — ไม่ต้องบันทึกซ้ำ');}
    clearTimeout(queueTimer);queueTimer=setTimeout(processQueue,15000);
    await sync(true);return;
   }
@@ -155,11 +157,11 @@ function editCat(id){const c=S.categories.find(x=>x.id===id);if(!c)return;$('cid
 $('cform').onsubmit=async e=>{e.preventDefault();const id=$('cid').value,d={id,type:$('ctype').value,name:$('cname').value,icon:$('cicon').value};$('cdlg').close();try{await apiPost({action:id?'updateCategory':'addCategory',data:d});await sync(true);toast('✓ บันทึกหมวดหมู่แล้ว')}catch(e){toast('บันทึกหมวดหมู่ไม่สำเร็จ')}};
 $('cdel').onclick=async()=>{const id=$('cid').value;if(!id||!confirm('ลบหมวดหมู่นี้ใช่ไหม? รายการเก่าจะยังอยู่'))return;$('cdlg').close();try{await apiPost({action:'deleteCategory',id});await sync(true);toast('✓ ลบหมวดหมู่แล้ว')}catch(e){toast('ลบหมวดหมู่ไม่สำเร็จ')}};
 $('date').textContent=new Date().toLocaleDateString('th-TH',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
-loadCache();processQueue();sync(false);document.addEventListener('visibilitychange',()=>{if(!document.hidden){processQueue();sync(true)}});window.addEventListener('focus',()=>{sync(true)});window.addEventListener('pageshow',()=>{sync(true)});setInterval(()=>{if(Q.length)processQueue();sync(true)},4000);
+loadCache();processQueue();sync(false);document.addEventListener('visibilitychange',()=>{if(!document.hidden){processQueue();sync(true)}});window.addEventListener('focus',()=>{sync(true)});window.addEventListener('pageshow',()=>{sync(true)});setInterval(()=>{if(Q.length)processQueue();sync(true)},15000);
 if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js?v=20261009-recovery');
 
 window.exportMyMoneyRecovery=function(){
- const backup={exportedAt:new Date().toISOString(),queue:Q,cache:S,cacheKey,queueKey,lastSyncError};
+ const backup={exportedAt:new Date().toISOString(),queue:Q,cache:S,cacheKey,queueKey,lastSyncError,lastSuccessfulSync};
  const blob=new Blob([JSON.stringify(backup,null,2)],{type:'application/json'});
  const url=URL.createObjectURL(blob),a=document.createElement('a');
  a.href=url;a.download='MyMoney-Backup-'+new Date().toISOString().slice(0,10)+'.json';a.click();

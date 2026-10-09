@@ -6,7 +6,7 @@
 <button class="nav" data-page="categories">◉ หมวดหมู่</button></aside>
 <main><header><div><small id="date"></small><h1 id="title">สวัสดี 👋</h1></div><small id="sync">กำลังซิงก์…</small></header>
 <section id="home" class="page on"><article class="hero"><small>ยอดเงินรวมทั้งหมด</small><strong id="total">฿0.00</strong><div class="twocol"><div><span>รายรับเดือนนี้</span><b id="income">฿0</b></div><div><span>รายจ่ายเดือนนี้</span><b id="expense">฿0</b></div></div></article>
-<div class="head"><h2>บัญชีของฉัน</h2></div><div id="cards" class="cards"></div><div class="head"><h2>รายการล่าสุด</h2><button data-page="history" class="goto">ดูทั้งหมด ›</button></div><div id="recent" class="list"></div></section>
+<div class="head"><h2>บัญชีของฉัน</h2></div><div id="cards" class="cards"></div><section class="panel"><h2>ตารางยอดคงเหลือ</h2><div id="homeBalances"></div><div class="minirow"><strong>รวมทุกบัญชี</strong><strong id="homeBalanceTotal">฿0.00</strong></div></section><div class="head"><h2>รายการล่าสุด</h2><button data-page="history" class="goto">ดูทั้งหมด ›</button></div><div id="recent" class="list"></div></section>
 <section id="history" class="page"><div class="filters"><input id="q" placeholder="ค้นหารายการ..."><select id="af"><option value="">ทุกบัญชี</option></select><select id="tf"><option value="">ทุกประเภท</option><option>รายรับ</option><option>รายจ่าย</option><option>โอนเงิน</option></select></div><div id="alltx" class="list"></div></section>
 <section id="summary" class="page"><div class="month"><button id="prev">‹</button><b id="month"></b><button id="next">›</button></div>
 <div class="metrics"><article><small>รายรับ</small><b id="si">฿0</b></article><article><small>รายจ่าย</small><b id="se">฿0</b></article><article><small>สุทธิ</small><b id="sn">฿0</b></article></div>
@@ -35,4 +35,4 @@
 <button class="primary">บันทึกหมวดหมู่</button>
 <button type="button" id="cdel" class="danger" hidden>ลบหมวดหมู่</button>
 </form></dialog>
-<script>window.API_URL="https://script.google.com/macros/s/AKfycbyPo8pfzsRpqpZA6WB1IVdqvxkB0CiOe3yzkhNhiSDmwUgGX5I4Y3_g4SHZ2bjRSK3ORw/exec"</script><script src="app.js?v=20261009"></script></body></html>
+<script>window.API_URL="https://script.google.com/macros/s/AKfycbyPo8pfzsRpqpZA6WB1IVdqvxkB0CiOe3yzkhNhiSDmwUgGX5I4Y3_g4SHZ2bjRSK3ORw/exec"</script><script src="app.js?v=20261009-recovery"></script><button type="button" onclick="exportMyMoneyRecovery()" style="position:fixed;bottom:78px;right:12px;z-index:100;background:#fff;border:1px solid #888;border-radius:18px;padding:8px 12px;font-size:12px;color:#333">สำรองข้อมูลในเครื่อง</button></body></html>

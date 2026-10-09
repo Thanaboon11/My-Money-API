@@ -1,6 +1,7 @@
 const API=window.API_URL,$=id=>document.getElementById(id);
 let S={accounts:[],categories:[],transactions:[],dashboard:{}},M=new Date(),saving=false,processing=false;
 const cacheKey='mm-sheet-sync-cache-v2',queueKey='mm-final-queue';
+// Keep legacy storage keys so pending offline entries survive upgrades.
 let Q=[];
 const money=n=>new Intl.NumberFormat('th-TH',{style:'currency',currency:'THB'}).format(Number(n)||0);
 function toast(t){$('toast').textContent=t;$('toast').classList.add('show');setTimeout(()=>$('toast').classList.remove('show'),1800)}
@@ -8,21 +9,34 @@ function saveCache(){localStorage.setItem(cacheKey,JSON.stringify(S));localStora
 function loadCache(){try{const x=JSON.parse(localStorage.getItem(cacheKey));if(x){S=x;render()}Q=JSON.parse(localStorage.getItem(queueKey)||'[]')||[]}catch(e){Q=[]}}
 async function apiGet(){const r=await fetch(API+'?action=bootstrap&_='+Date.now(),{cache:'no-store'});const j=await r.json();if(!j.success)throw Error(j.error||'โหลดไม่สำเร็จ');return j.data}
 async function apiPost(body){const r=await fetch(API,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body)});const j=await r.json();if(!j.success)throw Error(j.error||'บันทึกไม่สำเร็จ');return j}
-function syncState(){ $('sync').textContent=(processing||Q.length)?'● บันทึกในเครื่องแล้ว':'● ซิงก์แล้ว' }
+function syncState(){ $('sync').textContent=Q.length?'● รอส่ง '+Q.length+' รายการ':processing?'● กำลังซิงก์':'● ซิงก์แล้ว' }
+let queueTimer=null, syncing=false, requestGeneration=0, lastSyncError='';
+function overlayPending(server){
+ const next={...server,accounts:server.accounts||[],categories:server.categories||[],transactions:[...(server.transactions||[])]};
+ for(const job of Q){
+  if(job.action==='addTransaction'||job.action==='updateTransaction'){
+   const t=job.data;if(!t||!t.id)continue;
+   next.transactions=next.transactions.filter(x=>x.id!==t.id);
+   next.transactions.unshift(t);
+  }else if(job.action==='deleteTransaction') next.transactions=next.transactions.filter(x=>x.id!==job.id);
+ }
+ return next;
+}
 async function sync(silent=true){
- if(processing||Q.length)return;
  if(syncing)return;
  syncing=true;const generation=requestGeneration;
  try{
-  const d=await apiGet();
-  if(!processing&&!Q.length&&generation===requestGeneration){S=d;saveCache();render();syncState()}
- }catch(e){$('sync').textContent='● ออฟไลน์';if(!silent)toast('เชื่อม Google Sheets ไม่สำเร็จ')}
+  const server=await apiGet();
+  // Always refresh account/category metadata even if transactions are pending.
+  // Preserve local edits until the server confirms their mutation.
+  S=overlayPending(server);
+  saveCache();render();syncState();lastSyncError='';
+ }catch(e){lastSyncError=String(e.message||e);$('sync').textContent='● ซิงก์ไม่ได้';if(!silent)toast('เชื่อม Google Sheets ไม่สำเร็จ')}
  finally{syncing=false}
 }
-let queueTimer=null, syncing=false, requestGeneration=0;
 function enqueue(body){
  requestGeneration++;Q.push(body);saveCache();syncState();clearTimeout(queueTimer);
- queueTimer=setTimeout(processQueue,100);
+ queueTimer=setTimeout(processQueue,200);
 }
 async function processQueue(){
  if(processing||!Q.length)return;
@@ -30,12 +44,26 @@ async function processQueue(){
  while(Q.length){
   const job=Q[0];
   try{
-   await apiPost(job);
-   Q.shift();saveCache();syncState();
+   // A previous POST may have succeeded while its response was lost.
+   // Reconcile against the server by stable ID before retrying.
+   const server=await apiGet();
+   const tx=server.transactions||[];
+   const existing=(job.data&&job.data.id)?tx.find(t=>t.id===job.data.id):null;
+   let alreadyDone=false;
+   if(job.action==='addTransaction'&&existing)alreadyDone=true;
+   if(job.action==='deleteTransaction'&&!tx.some(t=>t.id===job.id))alreadyDone=true;
+   if(job.action==='updateTransaction'&&existing){
+    const d=job.data;
+    alreadyDone=['type','fromAccount','toAccount','category','title','note'].every(k=>String(existing[k]||'')===String(d[k]||''))&&Math.abs(Number(existing.amount)-Number(d.amount))<0.001;
+   }
+   if(!alreadyDone)await apiPost(job);
+   Q.shift();saveCache();syncState();lastSyncError='';
   }catch(e){
+   lastSyncError=String(e.message||e);
    processing=false;syncState();
-   toast('ส่งข้อมูลไม่สำเร็จ รายการยังเก็บในเครื่อง');
-   queueTimer=setTimeout(processQueue,12000);return;
+   toast('ยังมีรายการรอซิงก์ — ไม่ต้องบันทึกซ้ำ');
+   clearTimeout(queueTimer);queueTimer=setTimeout(processQueue,15000);
+   await sync(true);return;
   }
  }
  processing=false;syncState();await sync(true);
@@ -54,13 +82,20 @@ function render(){
  }
  if(t.type==='รายรับ'&&balances[t.fromAccount]!==undefined)balances[t.fromAccount]+=v;
  if(t.type==='รายจ่าย'&&balances[t.fromAccount]!==undefined)balances[t.fromAccount]-=v;
+ if(t.type==='โอนเงิน'){if(balances[t.fromAccount]!==undefined)balances[t.fromAccount]-=v;if(balances[t.toAccount]!==undefined)balances[t.toAccount]+=v;}
  });
  S.accounts.forEach(a=>a.balance=balances[a.id]??a.balance);
- const d={income,expense,totalBalance:Object.values(balances).reduce((a,b)=>a+b,0)};$('total').textContent=money(d.totalBalance);$('income').textContent=money(d.income);$('expense').textContent=money(d.expense);
+ const d={income,expense,totalBalance:S.accounts.filter(a=>a.status==='ใช้งาน').reduce((sum,a)=>sum+(balances[a.id]||0),0)};$('total').textContent=money(d.totalBalance);$('income').textContent=money(d.income);$('expense').textContent=money(d.expense);
+ $('homeBalances').innerHTML=S.accounts.filter(a=>a.status==='ใช้งาน').map(a=>`<div class="minirow"><span>${a.name}</span><b>${money(a.balance)}</b></div>`).join('');
+ $('homeBalanceTotal').textContent=money(S.accounts.filter(a=>a.status==='ใช้งาน').reduce((v,a)=>v+(Number(a.balance)||0),0));
  $('cards').innerHTML=S.accounts.filter(a=>a.status==='ใช้งาน').map(a=>`<div class="card"><span>${a.icon||'💳'}</span><small>${a.name}</small><b>${money(a.balance)}</b></div>`).join('');
  $('recent').innerHTML=txRows(S.transactions.slice(0,6));$('alltx').innerHTML=txRows(filterTx());
  const op=S.accounts.filter(a=>a.status==='ใช้งาน').map(a=>`<option value="${a.id}">${a.icon||''} ${a.name}</option>`).join('');
- $('from').innerHTML=op;$('af').innerHTML='<option value="">ทุกบัญชี</option>'+op;
+ const chosenAccount=$('from').value;const chosenFilter=$('af').value;
+  $('from').innerHTML=op;
+  if(chosenAccount && [...$('from').options].some(o=>o.value===chosenAccount)) $('from').value=chosenAccount;
+  $('af').innerHTML='<option value="">ทุกบัญชี</option>'+op;
+  if([...$('af').options].some(o=>o.value===chosenFilter)) $('af').value=chosenFilter;
  $('accList').innerHTML=S.accounts.filter(a=>a.status==='ใช้งาน').map(a=>`<div class="row acc" data-id="${a.id}"><div class="left"><span class="bubble">${a.icon||'💳'}</span><div><b>${a.name}</b><small>${a.accountType}</small></div></div><b>${money(a.balance)}</b></div>`).join('');
  $('catList').innerHTML=catRows();bind();summary();
 }
@@ -120,5 +155,13 @@ function editCat(id){const c=S.categories.find(x=>x.id===id);if(!c)return;$('cid
 $('cform').onsubmit=async e=>{e.preventDefault();const id=$('cid').value,d={id,type:$('ctype').value,name:$('cname').value,icon:$('cicon').value};$('cdlg').close();try{await apiPost({action:id?'updateCategory':'addCategory',data:d});await sync(true);toast('✓ บันทึกหมวดหมู่แล้ว')}catch(e){toast('บันทึกหมวดหมู่ไม่สำเร็จ')}};
 $('cdel').onclick=async()=>{const id=$('cid').value;if(!id||!confirm('ลบหมวดหมู่นี้ใช่ไหม? รายการเก่าจะยังอยู่'))return;$('cdlg').close();try{await apiPost({action:'deleteCategory',id});await sync(true);toast('✓ ลบหมวดหมู่แล้ว')}catch(e){toast('ลบหมวดหมู่ไม่สำเร็จ')}};
 $('date').textContent=new Date().toLocaleDateString('th-TH',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
-loadCache();processQueue();if(!Q.length)sync(false);document.addEventListener('visibilitychange',()=>{if(!document.hidden){processQueue();if(!Q.length)sync(true)}});window.addEventListener('focus',()=>{if(!Q.length)sync(true)});window.addEventListener('pageshow',()=>{if(!Q.length)sync(true)});setInterval(()=>{if(Q.length)processQueue();else sync(true)},4000);
-if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js?v=20261009');
+loadCache();processQueue();sync(false);document.addEventListener('visibilitychange',()=>{if(!document.hidden){processQueue();sync(true)}});window.addEventListener('focus',()=>{sync(true)});window.addEventListener('pageshow',()=>{sync(true)});setInterval(()=>{if(Q.length)processQueue();sync(true)},4000);
+if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js?v=20261009-recovery');
+
+window.exportMyMoneyRecovery=function(){
+ const backup={exportedAt:new Date().toISOString(),queue:Q,cache:S,cacheKey,queueKey,lastSyncError};
+ const blob=new Blob([JSON.stringify(backup,null,2)],{type:'application/json'});
+ const url=URL.createObjectURL(blob),a=document.createElement('a');
+ a.href=url;a.download='MyMoney-Backup-'+new Date().toISOString().slice(0,10)+'.json';a.click();
+ setTimeout(()=>URL.revokeObjectURL(url),10000);
+};
